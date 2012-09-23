@@ -135,6 +135,8 @@ static int acolumn = DEFAULT_ACOLUMN;
 static char *acolumn_spaces;
 
 static char *outfname = NULL;
+static char *reportfname = NULL;
+static char *ignorefname = NULL;
 /* If -ff, points to stderr. Else, it's our common output log */
 static FILE *shared_log;
 
@@ -184,51 +186,14 @@ static void
 usage(FILE *ofp, int exitval)
 {
 	fprintf(ofp, "\
-usage: strace [-CdffhiqrtttTvVxxy] [-I n] [-e expr]...\n\
-              [-a column] [-o file] [-s strsize] [-P path]...\n\
-              -p pid... / [-D] [-E var=val]... [-u username] PROG [ARGS]\n\
-   or: strace -c[df] [-I n] [-e expr]... [-O overhead] [-S sortby]\n\
-              -p pid... / [-D] [-E var=val]... [-u username] PROG [ARGS]\n\
--c -- count time, calls, and errors for each syscall and report summary\n\
--C -- like -c but also print regular output\n\
--d -- enable debug output to stderr\n\
--D -- run tracer process as a detached grandchild, not as parent\n\
--f -- follow forks, -ff -- with output into separate files\n\
--F -- attempt to follow vforks (deprecated, use -f)\n\
--i -- print instruction pointer at time of syscall\n\
--q -- suppress messages about attaching, detaching, etc.\n\
--r -- print relative timestamp, -t -- absolute timestamp, -tt -- with usecs\n\
--T -- print time spent in each syscall\n\
--v -- verbose mode: print unabbreviated argv, stat, termios, etc. args\n\
--x -- print non-ascii strings in hex, -xx -- print all strings in hex\n\
--y -- print paths associated with file descriptor arguments\n\
--h -- print help message, -V -- print version\n\
--a column -- alignment COLUMN for printing syscall results (default %d)\n\
--e expr -- a qualifying expression: option=[!]all or option=[!]val1[,val2]...\n\
-   options: trace, abbrev, verbose, raw, signal, read, or write\n\
--I interruptible --\n\
-   1: no signals are blocked\n\
-   2: fatal signals are blocked while decoding syscall (default)\n\
-   3: fatal signals are always blocked (default if '-o FILE PROG')\n\
-   4: fatal signals and SIGTSTP (^Z) are always blocked\n\
-      (useful to make 'strace -o FILE PROG' not stop on ^Z)\n\
--o file -- send trace output to FILE instead of stderr\n\
--O overhead -- set overhead for tracing syscalls to OVERHEAD usecs\n\
--p pid -- trace process with process id PID, may be repeated\n\
--s strsize -- limit length of print strings to STRSIZE chars (default %d)\n\
--S sortby -- sort syscall counts by: time, calls, name, nothing (default %s)\n\
--u username -- run command as username handling setuid and/or setgid\n\
--E var=val -- put var=val in the environment for command\n\
--E var -- remove var from the environment for command\n\
--P path -- trace accesses to path\n\
-"
-/* this is broken, so don't document it
--z -- print only succeeding syscalls\n\
- */
-/* experimental, don't document it yet (option letter may change in the future!)
--b -- detach on successful execve\n\
- */
-, DEFAULT_ACOLUMN, DEFAULT_STRLEN, DEFAULT_SORTBY);
+Revisor is a very limited version of strace 4.7 (http://sourceforge.net/projects/strace)\n\
+Main purpose of revisor is to trace file usage during a command execution\n\
+\n\
+usage: revisor -o file [-i file] [-h] [-v] PROG [ARGS]\n\
+-o file -- report file\n\
+-i file -- file with ignore rules\n\
+-h      -- show this message\n\
+-v      -- show version\n");
 	exit(exitval);
 }
 
@@ -383,8 +348,8 @@ ptrace_restart(int op, struct tcb *tcp, int sig)
 	 * but before we tried to restart it. Log looks ugly.
 	 */
 	if (current_tcp && current_tcp->curcol != 0) {
-		tprintf(" <ptrace(%s):%s>\n", msg, strerror(err));
-		line_ended();
+	  tprintf(" <ptrace(%s):%s>\n", msg, strerror(err));
+	  line_ended();
 	}
 	if (err == ESRCH)
 		return 0;
@@ -578,9 +543,9 @@ printleader(struct tcb *tcp)
 	current_tcp->curcol = 0;
 
 	if (print_pid_pfx)
-		tprintf("%-5d ", tcp->pid);
+	  tprintf("%-5d ", tcp->pid);
 	else if (nprocs > 1 && !outfname)
-		tprintf("[pid %5u] ", tcp->pid);
+	  tprintf("[pid %5u] ", tcp->pid);
 
 	if (tflag) {
 		char str[sizeof("HH:MM:SS")];
@@ -599,14 +564,14 @@ printleader(struct tcb *tcp)
 		else if (tflag > 2) {
 			tprintf("%ld.%06ld ",
 				(long) tv.tv_sec, (long) tv.tv_usec);
-		}
+				}
 		else {
 			time_t local = tv.tv_sec;
 			strftime(str, sizeof(str), "%T", localtime(&local));
 			if (tflag > 1)
-				tprintf("%s.%06ld ", str, (long) tv.tv_usec);
+			  tprintf("%s.%06ld ", str, (long) tv.tv_usec);
 			else
-				tprintf("%s ", str);
+			  tprintf("%s ", str);
 		}
 	}
 	if (iflag)
@@ -616,8 +581,8 @@ printleader(struct tcb *tcp)
 void
 tabto(void)
 {
-	if (current_tcp->curcol < acolumn)
-		tprints(acolumn_spaces + current_tcp->curcol);
+  /*if (current_tcp->curcol < acolumn)
+    tprints(acolumn_spaces + current_tcp->curcol);*/
 }
 
 /* Should be only called directly *after successful attach* to a tracee.
@@ -1490,122 +1455,27 @@ init(int argc, char *argv[])
 	shared_log = stderr;
 	set_sortby(DEFAULT_SORTBY);
 	set_personality(DEFAULT_PERSONALITY);
-	qualify("trace=all");
+	qualify("trace=open,openat,creat");
 	qualify("abbrev=all");
 	qualify("verbose=all");
 	qualify("signal=all");
-	while ((c = getopt(argc, argv,
-		"+bcCdfFhiqrtTvVxyz"
-		"D"
-		"a:e:o:O:p:s:S:u:E:P:I:")) != EOF) {
+	followfork++;
+	qflag = 1;
+	outfname = "/dev/null";
+	while ((c = getopt(argc, argv,"vho:i:")) != EOF) {
 		switch (c) {
-		case 'b':
-			detach_on_execve = 1;
-			break;
-		case 'c':
-			if (cflag == CFLAG_BOTH) {
-				error_msg_and_die("-c and -C are mutually exclusive");
-			}
-			cflag = CFLAG_ONLY_STATS;
-			break;
-		case 'C':
-			if (cflag == CFLAG_ONLY_STATS) {
-				error_msg_and_die("-c and -C are mutually exclusive");
-			}
-			cflag = CFLAG_BOTH;
-			break;
-		case 'd':
-			debug_flag = 1;
-			break;
-		case 'D':
-			daemonized_tracer = 1;
-			break;
-		case 'F':
-			optF = 1;
-			break;
-		case 'f':
-			followfork++;
-			break;
 		case 'h':
 			usage(stdout, 0);
 			break;
-		case 'i':
-			iflag = 1;
-			break;
-		case 'q':
-			qflag = 1;
-			break;
-		case 'r':
-			rflag = 1;
-			/* fall through to tflag++ */
-		case 't':
-			tflag++;
-			break;
-		case 'T':
-			Tflag = 1;
-			break;
-		case 'x':
-			xflag++;
-			break;
-		case 'y':
-			show_fd_path = 1;
-			break;
 		case 'v':
-			qualify("abbrev=none");
-			break;
-		case 'V':
 			printf("%s -- version %s\n", PACKAGE_NAME, VERSION);
 			exit(0);
 			break;
-		case 'z':
-			not_failing_only = 1;
-			break;
-		case 'a':
-			acolumn = string_to_uint(optarg);
-			if (acolumn < 0)
-				error_opt_arg(c, optarg);
-			break;
-		case 'e':
-			qualify(optarg);
-			break;
 		case 'o':
-			outfname = strdup(optarg);
+			reportfname = strdup(optarg);
 			break;
-		case 'O':
-			i = string_to_uint(optarg);
-			if (i < 0)
-				error_opt_arg(c, optarg);
-			set_overhead(i);
-			break;
-		case 'p':
-			process_opt_p_list(optarg);
-			break;
-		case 'P':
-			tracing_paths = 1;
-			if (pathtrace_select(optarg)) {
-				error_msg_and_die("Failed to select path '%s'", optarg);
-			}
-			break;
-		case 's':
-			i = string_to_uint(optarg);
-			if (i < 0)
-				error_opt_arg(c, optarg);
-			max_strlen = i;
-			break;
-		case 'S':
-			set_sortby(optarg);
-			break;
-		case 'u':
-			username = strdup(optarg);
-			break;
-		case 'E':
-			if (putenv(optarg) < 0)
-				die_out_of_memory();
-			break;
-		case 'I':
-			opt_intr = string_to_uint(optarg);
-			if (opt_intr <= 0 || opt_intr >= NUM_INTR_OPTS)
-				error_opt_arg(c, optarg);
+		case 'i':
+			ignorefname = strdup(optarg);
 			break;
 		default:
 			usage(stderr, 1);
@@ -1614,6 +1484,11 @@ init(int argc, char *argv[])
 	}
 	argv += optind;
 	/* argc -= optind; - no need, argc is not used below */
+
+	if (reportfname == NULL) {
+	  fprintf(stderr,"-o argument is mandatory\n");
+	    usage(stderr, 1);
+	}
 
 	acolumn_spaces = malloc(acolumn + 1);
 	if (!acolumn_spaces)
@@ -1983,9 +1858,9 @@ trace(void)
 			tcp = execve_thread;
 			tcp->pid = pid;
 			if (cflag != CFLAG_ONLY_STATS) {
-				printleader(tcp);
-				tprintf("+++ superseded by execve in pid %lu +++\n", old_pid);
-				line_ended();
+			  printleader(tcp);
+			  tprintf("+++ superseded by execve in pid %lu +++\n", old_pid);
+			  line_ended();
 				tcp->flags |= TCB_REPRINT;
 			}
 		}
@@ -2029,9 +1904,9 @@ trace(void)
 			if (pid == strace_child)
 				exit_code = WEXITSTATUS(status);
 			if (cflag != CFLAG_ONLY_STATS) {
-				printleader(tcp);
-				tprintf("+++ exited with %d +++\n", WEXITSTATUS(status));
-				line_ended();
+			  printleader(tcp);
+			  tprintf("+++ exited with %d +++\n", WEXITSTATUS(status));
+			  line_ended();
 			}
 			droptcb(tcp);
 			continue;
@@ -2138,14 +2013,14 @@ trace(void)
 #endif
 				printleader(tcp);
 				if (!stopped) {
-					tprintf("--- %s ", signame(sig));
-					printsiginfo(&si, verbose(tcp));
-					tprintf(PC_FORMAT_STR " ---\n"
-						PC_FORMAT_ARG);
+				  tprintf("--- %s ", signame(sig));
+				  printsiginfo(&si, verbose(tcp));
+				  tprintf(PC_FORMAT_STR " ---\n"
+					  PC_FORMAT_ARG);
 				} else
-					tprintf("--- stopped by %s" PC_FORMAT_STR " ---\n",
-						signame(sig)
-						PC_FORMAT_ARG);
+				  tprintf("--- stopped by %s" PC_FORMAT_STR " ---\n",
+					  signame(sig)
+					  PC_FORMAT_ARG);
 				line_ended();
 			}
 
@@ -2209,9 +2084,19 @@ main(int argc, char *argv[])
 {
 	init(argc, argv);
 
+	if (load_exclude_rules(ignorefname) != EXIT_SUCCESS) {
+	  fprintf(stderr,"Error during loading ignore rules\n");
+	  return 1;
+	}
+
 	/* Run main tracing loop */
 	if (trace() < 0)
-		return 1;
+	  return 1;
+
+	if (dump_result_to_file(reportfname) != EXIT_SUCCESS) {
+	  fprintf(stderr,"Error during writing results\n");
+	  return 1;
+	}
 
 	cleanup();
 	fflush(NULL);

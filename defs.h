@@ -492,6 +492,17 @@ int strace_vfprintf(FILE *fp, const char *fmt, va_list args);
 # define strace_vfprintf vfprintf
 #endif
 
+
+#define FTRACE_OK 0
+#define FTRACE_NOK 1
+
+extern int load_exclude_rules(char* );
+extern int dump_result_to_file(char* );
+extern int handle_opened_file(char* );
+extern int update_ignore_list(char* );
+extern int is_open_flag(mode_t,int);
+extern void extract_and_save_path(struct tcb *, long, int);
+
 extern void set_sortby(const char *);
 extern void set_overhead(int);
 extern void qualify(const char *);

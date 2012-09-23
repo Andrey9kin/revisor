@@ -391,34 +391,39 @@ tprint_open_modes(mode_t flags)
 	tprints(sprint_open_modes(flags) + sizeof("flags"));
 }
 
+/*
+ * low bits of the open(2) flags define access mode,
+ * other bits are real flags.
+ */
+int
+is_open_flag(mode_t flags,int flag)
+{
+	if (xlookup(open_access_modes, flags & 3))
+	  flags &= ~3;
+
+	if ((flags & flag) == flag)
+	  return FTRACE_OK;
+	return FTRACE_NOK;
+}
+
 static int
 decode_open(struct tcb *tcp, int offset)
 {
-	if (entering(tcp)) {
-		printpath(tcp, tcp->u_arg[offset]);
-		tprints(", ");
-		/* flags */
-		tprint_open_modes(tcp->u_arg[offset + 1]);
-		if (tcp->u_arg[offset + 1] & O_CREAT) {
-			/* mode */
-			tprintf(", %#lo", tcp->u_arg[offset + 2]);
-		}
-	}
-	return 0;
+  if (entering(tcp))
+    extract_and_save_path(tcp, tcp->u_arg[0],is_open_flag(tcp->u_arg[offset+1],O_CREAT));
+  return 0;
 }
 
 int
 sys_open(struct tcb *tcp)
 {
-	return decode_open(tcp, 0);
+  return decode_open(tcp, 0);
 }
 
 int
 sys_openat(struct tcb *tcp)
 {
-	if (entering(tcp))
-		print_dirfd(tcp, tcp->u_arg[0]);
-	return decode_open(tcp, 1);
+  return decode_open(tcp, 1);
 }
 
 #ifdef LINUXSPARC
@@ -461,11 +466,9 @@ solaris_open(struct tcb *tcp)
 int
 sys_creat(struct tcb *tcp)
 {
-	if (entering(tcp)) {
-		printpath(tcp, tcp->u_arg[0]);
-		tprintf(", %#lo", tcp->u_arg[1]);
-	}
-	return 0;
+  if (entering(tcp))
+    extract_and_save_path(tcp, tcp->u_arg[0],FTRACE_OK);
+  return 0;
 }
 
 static const struct xlat access_flags[] = {
