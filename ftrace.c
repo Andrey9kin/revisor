@@ -35,6 +35,7 @@ handle_opened_file(char* path_ptr)
 {
   int i = 0;
   int empty = -1;
+  char absp[PATH_MAX];
   struct stat file_stat;
 
   /* Skip files that doesn't exist */
@@ -49,20 +50,26 @@ handle_opened_file(char* path_ptr)
   if (S_ISLNK(file_stat.st_mode))
     return EXIT_SUCCESS;
 
+  if (realpath(path_ptr, absp) == NULL) {
+    fprintf(stderr, "realpath failed for %s\n",path_ptr);
+    fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
+    return EXIT_FAILURE;
+  }
+
   /* Try to apply exclude rules */
   for (i=0;i<FILES_MAX;i++) {
     /* skip whole list check, exit loop if first empty slot met */
     if (strcmp(exclude_patterns_g[i],"") == 0) break;
 
     /* apply exclude pattern */
-    if (strstr(path_ptr,exclude_patterns_g[i]) != NULL)
+    if (strstr(absp,exclude_patterns_g[i]) != NULL)
       return EXIT_SUCCESS;
   }
 
   /* Check for dublicates */
   for (i=0;i<FILES_MAX;i++) {
     /* Exit function if path already in the list  */
-    if (strcmp(opened_files_g[i],path_ptr) == 0)
+    if (strcmp(opened_files_g[i],absp) == 0)
       return EXIT_SUCCESS;
   }
 
@@ -73,7 +80,7 @@ handle_opened_file(char* path_ptr)
     /* i element is empty and it is first empty slot */
     if ((strcmp(opened_files_g[i],"") == 0) && (empty == -1))
       empty = i;
-    if ((strcmp(path_ptr,temp_files_g[i]) == 0)) /*path is temp file*/
+    if ((strcmp(absp,temp_files_g[i]) == 0)) /*path is temp file*/
       return EXIT_SUCCESS;
   }
 
@@ -84,7 +91,7 @@ handle_opened_file(char* path_ptr)
   }
 
   /* copy path to files list */
-  strcpy(opened_files_g[empty],path_ptr);
+  strcpy(opened_files_g[empty],absp);
 
   return EXIT_SUCCESS;
 }
@@ -142,27 +149,27 @@ dump_result_to_file(char* reportfname)
   }
 
   /* Print files and checksum to report file */
-  for (i=0;i<FILES_MAX;i++)
-    {
-      if (strcmp(opened_files_g[i],"") == 0) /* empty element */
-	continue;
+  for (i=0;i<FILES_MAX;i++) {
+    /* Stop if we have nothing to print */
+    if (strcmp(opened_files_g[i],"") == 0)
+      break;
 
-      /* Initiate algorithm type context descriptor */
-      td = mhash_init(MHASH_MD5);
+    /* Initiate algorithm type context descriptor */
+    td = mhash_init(MHASH_MD5);
 
-      /* Initiation failed */
-      if (td == MHASH_FAILED) {
-	fprintf(stderr, "md5 algorithm descriptor initiation failed\n");
-	fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
-	return EXIT_FAILURE;
-      }
-
-      mhash(td, opened_files_g[i], strlen(opened_files_g[i]));
-
-      mhash_deinit(td, &hash);
-
-      fprintf(fp,"%-10x\t%s\n",hash,opened_files_g[i]);
+    /* Initiation failed */
+    if (td == MHASH_FAILED) {
+      fprintf(stderr, "md5 algorithm descriptor initiation failed\n");
+      fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
+      return EXIT_FAILURE;
     }
+
+    mhash(td, opened_files_g[i], strlen(opened_files_g[i]));
+
+    mhash_deinit(td, &hash);
+
+    fprintf(fp,"%-10x\t%s\n",hash,opened_files_g[i]);
+  }
 
   /* Close file to save results */
   /* Close file failed */
@@ -176,7 +183,6 @@ dump_result_to_file(char* reportfname)
 }
 
 /* Read and save exclude rules
- * We assume that ignore rules should be stored in the home directory
  */
 int
 load_exclude_rules(char* ignorefname)

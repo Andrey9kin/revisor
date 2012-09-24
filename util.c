@@ -568,6 +568,7 @@ extract_and_save_path(struct tcb *tcp, long addr, int creat_check)
 	    }
 	    strcat(cwd, "/");
 	    strcat(cwd, path);
+
 	    //tprintf("%d %s\n",tcp->u_error,cwd);
 	    if (creat_check == FTRACE_OK)
 	      update_ignore_list(cwd);
@@ -590,10 +591,7 @@ void
 printpathn(struct tcb *tcp, long addr, int n)
 {
 	char path[MAXPATHLEN + 1];
-	char cwd[MAXPATHLEN];
-	char buffer[MAXPATHLEN];
 	int nul_seen;
-	ssize_t r;
 
 	if (!addr) {
 		tprints("NULL");
@@ -606,45 +604,18 @@ printpathn(struct tcb *tcp, long addr, int n)
 
 	/* Fetch one byte more to find out whether path length > n. */
 	nul_seen = umovestr(tcp, addr, n + 1, path);
-	if (nul_seen >= 0) {
-	  path[n] = '\0';
-	  
-	  /* Path is absolute */
-	  if (path[0] == '/') {
-	    //tprintf("%d %s\n",tcp->u_error,path);
-	    /* if file just created */
-	    handle_opened_file(path);
-	  }
-	  else {
-	    /* Compile path to cwd link for process */
-	    sprintf(buffer, "/proc/%d/cwd", tcp->pid);
-	    /* Read current path of the process from /proc/pid/cwd */
-	    r = readlink(buffer, cwd, PATH_MAX);
-	    if (r<0) {
-	      fprintf(stderr,"Readlin error for %s",buffer);
-	      fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
-	      return;
-	    }
-	    if (r>MAXPATHLEN) {
-	      fprintf(stderr,"Path is too long %s",buffer);
-	      fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
-	      return;
-	    }
-	    /* Set end of string, readlink return string without it */
-	    cwd[r] = '\0'; 
+	if (nul_seen < 0)
+		tprintf("%#lx", addr);
+	else {
+		char *outstr;
 
-	    /* Len of resulting string is longer than allowed */
-	    if ((strlen(cwd) + strlen("/") + strlen(path)) > MAXPATHLEN)
-	    if (r>MAXPATHLEN) {
-	      fprintf(stderr,"Path is too long %s/%s",cwd,path);
-	      fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
-	      return;
-	    }
-	    strcat(cwd, "/");
-	    strcat(cwd, path);
-	    //tprintf("%d %s\n",tcp->u_error,cwd);
-	    handle_opened_file(cwd);
-	  }
+		path[n] = '\0';
+		n++;
+		outstr = alloca(4 * n); /* 4*(n-1) + 3 for quotes and NUL */
+		string_quote(path, outstr, -1, n);
+		tprints(outstr);
+		if (!nul_seen)
+			tprints("...");
 	}
 }
 
