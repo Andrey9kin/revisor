@@ -1462,7 +1462,7 @@ init(int argc, char *argv[])
 	followfork++;
 	qflag = 1;
 	outfname = "/dev/null";
-	while ((c = getopt(argc, argv,"vho:i:")) != EOF) {
+	while ((c = getopt(argc, argv,"+vh" "o:i:")) != EOF) {
 		switch (c) {
 		case 'h':
 			usage(stdout, 0);
