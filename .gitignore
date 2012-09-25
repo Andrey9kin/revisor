@@ -28,8 +28,8 @@ Makefile.in
 /ioctls.h
 /ioctldefs.h
 /ioctlsort
-/strace
+/revisor
 
 /linux/ioctlent.h
 
-/strace-*.tar.xz
+/revisor-*.tar.xz
