@@ -209,8 +209,6 @@ calculate_md5(unsigned char *to, const char *file_path)
   for (i = 0; i < mhash_get_block_size(MHASH_MD5); i++) {
     to[i] = hash[i];
   }
-  /* Terminate str */
-  to[mhash_get_block_size(MHASH_MD5)] = '\0';
 
   return EXIT_SUCCESS;
 }
@@ -222,7 +220,7 @@ dump_result_to_file(char* reportfname)
 {
   int i, j = 0;
   FILE *fp = NULL;
-  unsigned char hash[100];
+  unsigned char hash[mhash_get_block_size(MHASH_MD5)];
   int number_of_files = 0;
   char *sorted_files[FILES_MAX];
 
@@ -264,7 +262,7 @@ dump_result_to_file(char* reportfname)
     }
 
 
-    for (j = 0; j < strlen((char *)hash); j++) {
+    for (j = 0; j < mhash_get_block_size(MHASH_MD5); j++) {
       fprintf(fp,"%.2x",hash[j]);
     }
     fprintf(fp,"\t%s\n", sorted_files[i]);
