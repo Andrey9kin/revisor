@@ -1,5 +1,6 @@
 #include "defs.h"
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -190,8 +191,8 @@ calculate_md5(unsigned char *to, const char *file_path)
   /* Allocate memory for entire file */
   data = malloc (sb.st_size + 1);
   if (!data) {
-      fprintf (stderr, "Out of memory error.\n");
-      return EXIT_FAILURE;
+    fprintf (stderr, "Out of memory error.\n");
+    return EXIT_FAILURE;
   }
 
   /* open file */
@@ -199,6 +200,10 @@ calculate_md5(unsigned char *to, const char *file_path)
 
   /* Open file failed */
   if (fp == NULL) {
+    /* Permission denied, lets skip those files. */
+    if (errno == EACCES) {
+      return EXIT_SUCCESS;
+    }
     fprintf(stderr, "Failed to open %s\n", file_path);
     fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
     return EXIT_FAILURE;
