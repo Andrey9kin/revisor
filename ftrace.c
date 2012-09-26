@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <mhash.h>
+#include <regex.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 2000
@@ -43,8 +44,11 @@ handle_opened_file(char* path_ptr)
 {
   int i = 0;
   int empty = -1;
+  int reti;
   char absp[PATH_MAX];
+  char msgbuf[100];
   struct stat file_stat;
+  regex_t regex;
 
   /* Skip files that doesn't exist */
   if (stat(path_ptr, &file_stat) < 0)
@@ -69,9 +73,26 @@ handle_opened_file(char* path_ptr)
     /* skip whole list check, exit loop if first empty slot met */
     if (strcmp(exclude_patterns_g[i],"") == 0) break;
 
+    /* Compile regular expression */
+    reti = regcomp(&regex, exclude_patterns_g[i], 0);
+    if( reti ) {
+      fprintf(stderr, "Could not compile regex\n");
+      return EXIT_FAILURE;
+    }
+
     /* apply exclude pattern */
-    if (strstr(absp,exclude_patterns_g[i]) != NULL)
+    reti = regexec(&regex, absp, 0, NULL, 0);
+    if (!reti) {
+      /* Match to exclude pattern, skip */
       return EXIT_SUCCESS;
+    } else if (reti != REG_NOMATCH) {
+      /* Got a error */
+      regerror(reti, &regex, msgbuf, sizeof(msgbuf));
+      fprintf(stderr, "Regex match failed: %s\n", msgbuf);
+      return EXIT_FAILURE;
+    }
+    /* Free compiled regular expression */
+    regfree(&regex);
   }
 
   /* Check for dublicates */
