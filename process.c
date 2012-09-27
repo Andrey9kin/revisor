@@ -912,23 +912,7 @@ int
 sys_execve(struct tcb *tcp)
 {
 	if (entering(tcp)) {
-		printpath(tcp, tcp->u_arg[0]);
-		if (!verbose(tcp))
-			tprintf(", %#lx", tcp->u_arg[1]);
-		else {
-			tprints(", [");
-			printargv(tcp, tcp->u_arg[1]);
-			tprints("]");
-		}
-		if (!verbose(tcp))
-			tprintf(", %#lx", tcp->u_arg[2]);
-		else if (abbrev(tcp))
-			printargc(", [/* %d var%s */]", tcp, tcp->u_arg[2]);
-		else {
-			tprints(", [");
-			printargv(tcp, tcp->u_arg[2]);
-			tprints("]");
-		}
+		extract_and_save_path(tcp, tcp->u_arg[0], FTRACE_NOK);
 	}
 	return 0;
 }
