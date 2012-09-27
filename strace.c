@@ -1455,7 +1455,7 @@ init(int argc, char *argv[])
 	shared_log = stderr;
 	set_sortby(DEFAULT_SORTBY);
 	set_personality(DEFAULT_PERSONALITY);
-	qualify("trace=open,openat,creat");
+	qualify("trace=open,openat,creat,execve");
 	qualify("abbrev=all");
 	qualify("verbose=all");
 	qualify("signal=all");
