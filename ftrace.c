@@ -230,7 +230,10 @@ calculate_md5(unsigned char *to, const char *file_path)
   for (i = 0; i < mhash_get_block_size(MHASH_MD5); i++) {
     to[i] = hash[i];
   }
-
+  
+  /* Free memory allocated by MD5 checksum calculation */
+  free(hash);
+  
   return EXIT_SUCCESS;
 }
 
