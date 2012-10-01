@@ -496,6 +496,7 @@ int strace_vfprintf(FILE *fp, const char *fmt, va_list args);
 #define FTRACE_OK 0
 #define FTRACE_NOK 1
 
+extern int init_tree_structures();
 extern int load_exclude_rules(char* );
 extern int dump_result_to_file(char* );
 extern int handle_opened_file(char* );

@@ -2084,6 +2084,11 @@ main(int argc, char *argv[])
 {
 	init(argc, argv);
 
+	if (init_tree_structures() != EXIT_SUCCESS) {
+	  fprintf(stderr,"Error during data structure initialization\n");
+	  return 1;
+	}
+
 	if (load_exclude_rules(ignorefname) != EXIT_SUCCESS) {
 	  fprintf(stderr,"Error during loading ignore rules\n");
 	  return 1;
