@@ -16,27 +16,51 @@
 #include <sys/syscall.h>
 #include <mhash.h>
 #include <regex.h>
+#include <glib.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 2000
 #endif
 
-#define FILES_MAX 20000
+#define REGEX_MAX 1000
 
-/* I'm too lazy to write nice dynamic array and then pass it to all functions
- * thats why we will use global static array of static length strings
- */
-char opened_files_g[FILES_MAX][PATH_MAX];
-char temp_files_g[FILES_MAX][PATH_MAX];
-char exclude_patterns_g[FILES_MAX][PATH_MAX];
 
-/* compare function used by qsort
+/* used to keep track of */
+int sorted_files_index_g;
+
+/* The value stored in all tree-nodes so that the lookup function don't return NULL */
+int tree_value_g;
+
+/* This is allocated and filled by a callback function during tree traversal */
+char **sorted_files_g;
+
+/* The two trees (ignore tree is used because regexp is many times slower) */
+GTree *tracked_files_tree_g;
+GTree *ignore_files_tree_g;
+
+/* Used for storing pre-compiled regex exclusion patterns */
+regex_t *exclude_patterns_compiled_regex_g[REGEX_MAX];
+
+
+
+/* Move files from tree to sorted array
 */
-static int
-str_sort_compare (const void * a, const void * b)
-{
-    return strcmp(*(const char **)a, *(const char **)b);
+gboolean
+iter_all(gpointer key, gpointer value, gpointer data) {
+  sorted_files_g[sorted_files_index_g] = (char *)key;
+  sorted_files_index_g++;
+  return FALSE;
 }
+
+/* free memory used by the string key
+* This is a callback method called for each key by g_tree_destroy 
+*/
+void
+destroy_key(gpointer data) {
+  free((char *)data);
+}
+
+
 
 /* Handle opened file
  */
@@ -44,8 +68,8 @@ int
 handle_opened_file(char* path_ptr)
 {
   int i = 0;
-  int empty = -1;
   int reti;
+  char *path;
   char absp[PATH_MAX];
   char msgbuf[100];
   struct stat file_stat;
@@ -69,22 +93,25 @@ handle_opened_file(char* path_ptr)
     return EXIT_FAILURE;
   }
 
-  /* Try to apply exclude rules */
-  for (i=0;i<FILES_MAX;i++) {
-    /* skip whole list check, exit loop if first empty slot met */
-    if (strcmp(exclude_patterns_g[i],"") == 0) break;
+  /* Exit function if path already is in the ignore tree  */
+  if(g_tree_lookup(ignore_files_tree_g, absp) != NULL) {
+    return EXIT_SUCCESS;
+  }
 
-    /* Compile regular expression */
-    reti = regcomp(&regex, exclude_patterns_g[i], 0);
-    if( reti ) {
-      fprintf(stderr, "Could not compile regex\n");
-      return EXIT_FAILURE;
-    }
+  /* Try to apply exclude regexp */
+  for (i=0;i<REGEX_MAX;i++) {
+    /* skip whole list check, exit loop if first empty slot met */
+    if (exclude_patterns_compiled_regex_g[i] == NULL) break;
 
     /* apply exclude pattern */
-    reti = regexec(&regex, absp, 0, NULL, 0);
+    reti = regexec(exclude_patterns_compiled_regex_g[i], absp, 0, NULL, 0);
+
     if (!reti) {
-      /* Match to exclude pattern, skip */
+      /* Match to exclude pattern, 
+         add to ignore tree and skip */
+      path = strdup(absp);
+      g_tree_insert(ignore_files_tree_g, path, &tree_value_g);
+
       return EXIT_SUCCESS;
     } else if (reti != REG_NOMATCH) {
       /* Got a error */
@@ -92,36 +119,22 @@ handle_opened_file(char* path_ptr)
       fprintf(stderr, "Regex match failed: %s\n", msgbuf);
       return EXIT_FAILURE;
     }
-    /* Free compiled regular expression */
-    regfree(&regex);
   }
 
-  /* Check for dublicates */
-  for (i=0;i<FILES_MAX;i++) {
-    /* Exit function if path already in the list  */
-    if (strcmp(opened_files_g[i],absp) == 0)
-      return EXIT_SUCCESS;
+  /* Exit function if path already is in the tree  */
+  if(g_tree_lookup(tracked_files_tree_g, absp) != NULL) {
+    return EXIT_SUCCESS;
   }
 
-  /* Find next empty place in global files list
-   * and check that opened file is not a temp file
-   */
-  for (i=0;i<FILES_MAX;i++) {
-    /* i element is empty and it is first empty slot */
-    if ((strcmp(opened_files_g[i],"") == 0) && (empty == -1))
-      empty = i;
-    if ((strcmp(absp,temp_files_g[i]) == 0)) /*path is temp file*/
-      return EXIT_SUCCESS;
-  }
+  /* Store string in tracked files */
+  path = strdup(absp);
+  g_tree_insert(tracked_files_tree_g, path, &tree_value_g);
 
-  /* List is full */
-  if (empty == -1) {
-    fprintf(stderr, "To many opened files to handle\n");
-    return EXIT_FAILURE;
-  }
 
-  /* copy path to files list */
-  strcpy(opened_files_g[empty],absp);
+  /* Store string in ignore list */
+  path = strdup(absp);
+  g_tree_insert(ignore_files_tree_g, path, &tree_value_g);
+
 
   return EXIT_SUCCESS;
 }
@@ -131,30 +144,31 @@ handle_opened_file(char* path_ptr)
 int
 update_ignore_list(char* path_ptr)
 {
-  int i = 0;
-  int empty = -1;
+  char *path;
 
-  /* Try to apply exclude rules */
-  for (i=0;i<FILES_MAX;i++) {
-    /* skip whole list check, exit loop if first empty slot met */
-    if (strcmp(exclude_patterns_g[i],"") == 0) {
-      empty = i;
-      break;
-    }
-
-    /* Exit if file already it the list */
-    if (strcmp(exclude_patterns_g[i],path_ptr) == 0)
-      return EXIT_SUCCESS;
+  /* Exit function if path already is in the tree  */
+  if(g_tree_lookup(ignore_files_tree_g, path_ptr) != NULL) {
+    return EXIT_SUCCESS;
   }
 
-  if (empty == -1) {
-    fprintf(stderr, "To many ignore files to handle\n");
+  /* Store string in ignore tree */
+  path = strdup(path_ptr);
+  g_tree_insert(ignore_files_tree_g, path, &tree_value_g);
+
+  return EXIT_SUCCESS;
+}
+
+/* Precompile regex
+*/
+int 
+compile_and_store_regex(const char *pattern_ptr, regex_t *regex_ptr) {
+  int reti = 0;
+  /* Compile regular expression */
+  reti = regcomp(regex_ptr, pattern_ptr, 0);
+  if( reti ) {
+    fprintf(stderr, "Could not compile regex\n");
     return EXIT_FAILURE;
   }
-
-  /* copy path to files list */
-  strcpy(exclude_patterns_g[empty],path_ptr);
-
   return EXIT_SUCCESS;
 }
 
@@ -247,11 +261,11 @@ calculate_md5(unsigned char *to, const char *file_path)
 int
 dump_result_to_file(char* reportfname)
 {
-  int i, j = 0;
+  int i = 0;
+  int j = 0;
+  int nnodes = 0;;
   FILE *fp = NULL;
   unsigned char hash[mhash_get_block_size(MHASH_MD5)];
-  int number_of_files = 0;
-  char *sorted_files[FILES_MAX];
 
   /* Create file to record results */
   fp=fopen(reportfname, "w");
@@ -263,44 +277,46 @@ dump_result_to_file(char* reportfname)
     return EXIT_FAILURE;
   }
 
-  /* Copy to array of char-pointers, qsort need an array of pointers */
-  for (i = 0; i < FILES_MAX; i++) {
-    /* Stop if we have nothing to copy */
-    if (strcmp(opened_files_g[i],"") == 0)
-      break;
+  /* Setup before copy */
+  sorted_files_index_g = 0;
+  nnodes = g_tree_nnodes(tracked_files_tree_g);
 
-    /* Number of files in opened_files_g */
-    number_of_files++;
-
-    int str_length = strlen(opened_files_g[i]) + 1;
-    char *path = (char*)malloc(str_length);
-    strncpy(path, opened_files_g[i], str_length);
-    sorted_files[i] = path;
+  sorted_files_g = malloc(sizeof(char *) * nnodes);
+  if (!sorted_files_g) {
+    fprintf (stderr, "Out of memory error.\n");
+    return EXIT_FAILURE;
   }
 
-  /* sort by file path */
-  qsort(sorted_files, number_of_files, sizeof (const char *), str_sort_compare);
+  /* Copy char pointers from 'tracked_files_tree_g' to 'sorted_files_g' */
+  g_tree_foreach(tracked_files_tree_g, (GTraverseFunc)iter_all, NULL);
 
-  /* Print files and checksum to report file */
-  for (i=0;i<number_of_files;i++) {
+  /* Print to file */
+  for (i = 0; i < nnodes; i++) {
+    if(sorted_files_g[i] == NULL)
+      break;
 
     /* Calculate md5 */
-    if(calculate_md5((unsigned char*)&hash, sorted_files[i]) != 0) {
-      fprintf(stderr, "Failed to calculate md5 for '%s'\n", sorted_files[i]);
-      return EXIT_FAILURE;
+    if(calculate_md5((unsigned char*)&hash, sorted_files_g[i]) != 0) {
+      fprintf(stderr, "Failed to calculate md5 for '%s'\n", sorted_files_g[i]);
     }
-
 
     for (j = 0; j < mhash_get_block_size(MHASH_MD5); j++) {
       fprintf(fp,"%.2x",hash[j]);
     }
-    fprintf(fp,"\t%s\n", sorted_files[i]);
+    fprintf(fp,"\t%s\n", sorted_files_g[i]);
   }
 
-  /* free memory used by sorted file array */
-  for (i=0;i<number_of_files;i++) {
-    free(sorted_files[i]);
+  /* free memory used by tree (this will also free 'sorted_files_g' since it point to the same memory */
+  g_tree_destroy(tracked_files_tree_g);
+  g_tree_destroy(ignore_files_tree_g);
+
+  /* Free compiled regular expression */
+  for (i=0;i<REGEX_MAX;i++) {
+    if(exclude_patterns_compiled_regex_g[i] == NULL)
+      break;
+    regfree(exclude_patterns_compiled_regex_g[i]);
   }
+
 
   /* Close file to save results */
   /* Close file failed */
@@ -313,6 +329,25 @@ dump_result_to_file(char* reportfname)
   return EXIT_SUCCESS;
 }
 
+/* Create the binary tree-structure
+*/
+int
+init_tree_structures() {
+  /* Set a value so that it isn't zero */
+  tree_value_g = 42;
+
+  tracked_files_tree_g = g_tree_new_full((GCompareDataFunc)g_ascii_strcasecmp, NULL, (GDestroyNotify)destroy_key, NULL);
+  if(tracked_files_tree_g == NULL) {
+    return EXIT_FAILURE;
+  }
+
+  ignore_files_tree_g = g_tree_new_full((GCompareDataFunc)g_ascii_strcasecmp, NULL, (GDestroyNotify)destroy_key, NULL);
+  if(ignore_files_tree_g == NULL) {
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
 
 
 /* Read and save exclude rules
@@ -324,6 +359,8 @@ load_exclude_rules(char* ignorefname)
   FILE *fp = NULL;
   int j = 0;
   int len = 0;
+  int reti;
+  regex_t *regex;
   struct stat file_stat;
 
   /* No file no rules */
@@ -353,8 +390,23 @@ load_exclude_rules(char* ignorefname)
       len = strlen(temp_buffer);
       if( temp_buffer[len-1] == '\n' )
 	temp_buffer[len-1] = 0;
+
+      
+      /* allocate memory */
+      regex = malloc(sizeof(regex_t));
+      if (!regex) {
+        fprintf (stderr, "Out of memory error.\n");
+        return EXIT_FAILURE;
+      }
+
+      /* Compile regex */
+      reti = compile_and_store_regex(temp_buffer, regex);
+      if(reti != EXIT_SUCCESS) {
+        return reti;
+      }
+
       /* Save rule in exclude list */
-      strcpy(exclude_patterns_g[j],temp_buffer);
+      exclude_patterns_compiled_regex_g[j] = regex;
       j++;
     }
 
