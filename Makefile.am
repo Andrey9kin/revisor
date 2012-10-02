@@ -6,13 +6,14 @@ bin_PROGRAMS = revisor
 man_MANS = strace.1
 bin_SCRIPTS = strace-graph strace-log-merge
 
+glib2           = `pkg-config --cflags glib-2.0`
 OS		= linux
 # ARCH is `i386', `m68k', `sparc', etc.
 ARCH		= @arch@
 
 ACLOCAL_AMFLAGS = -I m4
 AM_CFLAGS = $(WARN_CFLAGS)
-AM_CPPFLAGS = -I$(srcdir)/$(OS)/$(ARCH) -I$(srcdir)/$(OS) -I$(builddir)/$(OS)
+AM_CPPFLAGS = -I$(srcdir)/$(OS)/$(ARCH) -I$(srcdir)/$(OS) -I$(builddir)/$(OS) $(glib2)
 
 revisor_SOURCES = strace.c syscall.c count.c util.c desc.c file.c ipc.c \
 		 io.c ioctl.c mem.c net.c process.c bjm.c quota.c \
@@ -20,7 +21,7 @@ revisor_SOURCES = strace.c syscall.c count.c util.c desc.c file.c ipc.c \
 		 scsi.c stream.c block.c pathtrace.c mtd.c vsprintf.c \
 		 loop.c ftrace.c
 
-revisor_LDFLAGS = -lmhash
+revisor_LDFLAGS = -lmhash -lglib-2.0
 
 noinst_HEADERS = defs.h
 
