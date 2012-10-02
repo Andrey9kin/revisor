@@ -41,20 +41,6 @@ GTree *ignore_files_tree_g;
 regex_t *exclude_patterns_compiled_regex_g[REGEX_MAX];
 
 
-/* Allocate memory and make a string copy.
-*  Use free on all strings created with this function.
-*/
-char *
-get_str_copy(const char *str) {
-  char *retstr;
-  int str_length;
-
-  str_length = strlen(str) + 1;
-  retstr = (char*)malloc(str_length);
-  strncpy(retstr, str, str_length);
-
-  return retstr;
-}
 
 /* Move files from tree to sorted array
 */
@@ -66,6 +52,7 @@ iter_all(gpointer key, gpointer value, gpointer data) {
 }
 
 /* free memory used by the string key
+* This is a callback method called for each key by g_tree_destroy 
 */
 void
 destroy_key(gpointer data) {
@@ -105,7 +92,7 @@ handle_opened_file(char* path_ptr)
     return EXIT_FAILURE;
   }
 
-  /* Exit function if path already is in the tree  */
+  /* Exit function if path already is in the ignore tree  */
   if(g_tree_lookup(ignore_files_tree_g, absp) != NULL) {
     return EXIT_SUCCESS;
   }
@@ -121,7 +108,7 @@ handle_opened_file(char* path_ptr)
     if (!reti) {
       /* Match to exclude pattern, 
          add to ignore tree and skip */
-      path = get_str_copy(absp);
+      path = strdup(absp);
       g_tree_insert(ignore_files_tree_g, path, &tree_value_g);
 
       return EXIT_SUCCESS;
@@ -139,12 +126,12 @@ handle_opened_file(char* path_ptr)
   }
 
   /* Store string in tracked files */
-  path = get_str_copy(absp);
+  path = strdup(absp);
   g_tree_insert(tracked_files_tree_g, path, &tree_value_g);
 
 
   /* Store string in ignore list */
-  path = get_str_copy(absp);
+  path = strdup(absp);
   g_tree_insert(ignore_files_tree_g, path, &tree_value_g);
 
 
@@ -164,13 +151,14 @@ update_ignore_list(char* path_ptr)
   }
 
   /* Store string in ignore tree */
-  path = get_str_copy(path_ptr);
+  path = strdup(path_ptr);
   g_tree_insert(ignore_files_tree_g, path, &tree_value_g);
 
   return EXIT_SUCCESS;
 }
 
-
+/* Precompile regex
+*/
 int 
 compile_and_store_regex(const char *pattern_ptr, regex_t *regex_ptr) {
   int reti = 0;
@@ -284,11 +272,17 @@ dump_result_to_file(char* reportfname)
     return EXIT_FAILURE;
   }
 
-
-  /* Copy char pointers from 'tracked_files_tree_g' to 'sorted_files_g' */
+  /* Setup before copy */
   sorted_files_index_g = 0;
   nnodes = g_tree_nnodes(tracked_files_tree_g);
+
   sorted_files_g = malloc(sizeof(char *) * nnodes);
+  if (!sorted_files_g) {
+    fprintf (stderr, "Out of memory error.\n");
+    return EXIT_FAILURE;
+  }
+
+  /* Copy char pointers from 'tracked_files_tree_g' to 'sorted_files_g' */
   g_tree_foreach(tracked_files_tree_g, (GTraverseFunc)iter_all, NULL);
 
   /* Print to file */
@@ -307,8 +301,7 @@ dump_result_to_file(char* reportfname)
     fprintf(fp,"\t%s\n", sorted_files_g[i]);
   }
 
-
-  /* free memory used by tree (this will make 'sorted_files_g' empty since they point to the same memory */
+  /* free memory used by tree (this will also free 'sorted_files_g' since it point to the same memory */
   g_tree_destroy(tracked_files_tree_g);
   g_tree_destroy(ignore_files_tree_g);
 
@@ -335,6 +328,7 @@ dump_result_to_file(char* reportfname)
 */
 int
 init_tree_structures() {
+  /* Set a value so that it isn't zero */
   tree_value_g = 42;
 
   tracked_files_tree_g = g_tree_new_full((GCompareDataFunc)g_ascii_strcasecmp, NULL, (GDestroyNotify)destroy_key, NULL);

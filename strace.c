@@ -279,11 +279,6 @@ void die_out_of_memory(void)
 	error_msg_and_die("Out of memory");
 }
 
-static void
-error_opt_arg(int opt, const char *arg)
-{
-	error_msg_and_die("Invalid -%c argument: '%s'", opt, arg);
-}
 
 /* Glue for systems without a MMU that cannot provide fork() */
 #ifdef HAVE_FORK
@@ -780,34 +775,6 @@ detach(struct tcb *tcp)
 	droptcb(tcp);
 
 	return error;
-}
-
-static void
-process_opt_p_list(char *opt)
-{
-	while (*opt) {
-		/*
-		 * We accept -p PID,PID; -p "`pidof PROG`"; -p "`pgrep PROG`".
-		 * pidof uses space as delim, pgrep uses newline. :(
-		 */
-		int pid;
-		char *delim = opt + strcspn(opt, ", \n\t");
-		char c = *delim;
-
-		*delim = '\0';
-		pid = string_to_uint(opt);
-		if (pid <= 0) {
-			error_msg_and_die("Invalid process id: '%s'", opt);
-		}
-		if (pid == strace_tracer_pid) {
-			error_msg_and_die("I'm sorry, I can't let you do that, Dave.");
-		}
-		*delim = c;
-		alloctcb(pid);
-		if (c == '\0')
-			break;
-		opt = delim + 1;
-	}
 }
 
 static void
@@ -1424,11 +1391,11 @@ static void __attribute__ ((noinline))
 init(int argc, char *argv[])
 {
 	struct tcb *tcp;
-	int c, i;
+	int c;
 	int optF = 0;
 	struct sigaction sa;
 
-	progname = argv[0] ? argv[0] : "strace";
+	progname = argv[0] ? argv[0] : "revisor";
 
 	/* Make sure SIGCHLD has the default action so that waitpid
 	   definitely works without losing track of children.  The user
@@ -1461,7 +1428,7 @@ init(int argc, char *argv[])
 	qualify("signal=all");
 	followfork++;
 	qflag = 1;
-	outfname = "/dev/null";
+	outfname = strdup("/dev/null");
 	while ((c = getopt(argc, argv,"+vh" "o:i:")) != EOF) {
 		switch (c) {
 		case 'h':
