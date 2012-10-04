@@ -468,19 +468,7 @@ strace_popen(const char *command)
 void
 tprintf(const char *fmt, ...)
 {
-	va_list args;
-
-	va_start(args, fmt);
-	if (current_tcp) {
-		int n = strace_vfprintf(current_tcp->outf, fmt, args);
-		if (n < 0) {
-			if (current_tcp->outf != stderr)
-				perror(outfname == NULL
-				       ? "<writing to pipe>" : outfname);
-		} else
-			current_tcp->curcol += n;
-	}
-	va_end(args);
+	return;
 }
 
 void
