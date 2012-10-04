@@ -509,11 +509,11 @@ string_quote(const char *instr, char *outstr, long len, int size)
  * If path length exceeds `n', append `...' to the output.
  */
 void
-extract_and_save_path(struct tcb *tcp, long addr, int creat_check)
+extract_and_save_path(struct tcb *tcp, long addr, int open_mode)
 {
-	char path[MAXPATHLEN + 1];
-	char cwd[MAXPATHLEN];
-	char buffer[MAXPATHLEN];
+	char path[PATH_MAX + 1];
+	char cwd[PATH_MAX];
+	char buffer[PATH_MAX];
 	int nul_seen;
 	ssize_t r;
 
@@ -523,21 +523,20 @@ extract_and_save_path(struct tcb *tcp, long addr, int creat_check)
 	}
 
 	/* Fetch one byte more to find out whether path length > n. */
-	nul_seen = umovestr(tcp, addr, MAXPATHLEN + 1, path);
+	nul_seen = umovestr(tcp, addr, PATH_MAX + 1, path);
 	if (nul_seen >= 0) {
-	  path[MAXPATHLEN] = '\0';
+	  path[PATH_MAX] = '\0';
 	  
 	  /* Path is absolute */
 	  if (path[0] == '/') {
-	    //tprintf("%d %s\n",tcp->u_error,path);
 	    /* if file just created */
-	    if (creat_check == FTRACE_OK)
+	    if (open_mode == REVISOR_MODE_CREATE)
 	      update_ignore_list(path);
-	    else if (creat_check == FTRACE_NOK)
+	    else if (open_mode == REVISOR_MODE_OPEN)
 	      handle_opened_file(path);
 	    else
 	      fprintf(stderr,"Unexpected value %d, at %s:%d",
-		      creat_check,
+		      open_mode,
 		      __FILE__,
 		      __LINE__);
 	  }
@@ -551,7 +550,7 @@ extract_and_save_path(struct tcb *tcp, long addr, int creat_check)
 	      fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
 	      return;
 	    }
-	    if (r>MAXPATHLEN) {
+	    if (r>PATH_MAX) {
 	      fprintf(stderr,"Path is too long %s",buffer);
 	      fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
 	      return;
@@ -560,8 +559,8 @@ extract_and_save_path(struct tcb *tcp, long addr, int creat_check)
 	    cwd[r] = '\0'; 
 
 	    /* Len of resulting string is longer than allowed */
-	    if ((strlen(cwd) + strlen("/") + strlen(path)) > MAXPATHLEN)
-	    if (r>MAXPATHLEN) {
+	    if ((strlen(cwd) + strlen("/") + strlen(path)) > PATH_MAX)
+	    if (r>PATH_MAX) {
 	      fprintf(stderr,"Path is too long %s/%s",cwd,path);
 	      fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
 	      return;
@@ -569,14 +568,13 @@ extract_and_save_path(struct tcb *tcp, long addr, int creat_check)
 	    strcat(cwd, "/");
 	    strcat(cwd, path);
 
-	    //tprintf("%d %s\n",tcp->u_error,cwd);
-	    if (creat_check == FTRACE_OK)
+	    if (open_mode == REVISOR_MODE_CREATE)
 	      update_ignore_list(cwd);
-	    else if (creat_check == FTRACE_NOK)
+	    else if (open_mode == REVISOR_MODE_OPEN)
 	      handle_opened_file(cwd);
 	    else
 	      fprintf(stderr,"Unexpected value %d, at %s:%d",
-		      creat_check,
+		      open_mode,
 		      __FILE__,
 		      __LINE__);
 	  }
@@ -590,7 +588,7 @@ extract_and_save_path(struct tcb *tcp, long addr, int creat_check)
 void
 printpathn(struct tcb *tcp, long addr, int n)
 {
-	char path[MAXPATHLEN + 1];
+	char path[PATH_MAX + 1];
 	int nul_seen;
 
 	if (!addr) {
@@ -623,7 +621,7 @@ void
 printpath(struct tcb *tcp, long addr)
 {
 	/* Size must correspond to char path[] size in printpathn */
-	printpathn(tcp, addr, MAXPATHLEN);
+	printpathn(tcp, addr, PATH_MAX);
 }
 
 /*

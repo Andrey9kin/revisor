@@ -492,15 +492,25 @@ int strace_vfprintf(FILE *fp, const char *fmt, va_list args);
 # define strace_vfprintf vfprintf
 #endif
 
+#ifndef PATH_MAX
+#define PATH_MAX 2000
+#endif
 
-#define FTRACE_OK 0
-#define FTRACE_NOK 1
+/* Modes definition */
+#define REVISOR_MODE_OPEN 0
+#define REVISOR_MODE_CREATE 1
+
+/* Modes definition */
+#define REVISOR_TRIGGER_CHANGES_FOUND 0
+#define REVISOR_TRIGGER_NO_CHANGES_FOUND 1
+#define REVISOR_TRIGGER_ERROR 2
 
 extern int init_tree_structures();
 extern int load_exclude_rules(char* );
 extern int dump_result_to_file(char* );
 extern int handle_opened_file(char* );
 extern int update_ignore_list(char* );
+extern int check_for_changes(char* );
 extern int is_open_flag(mode_t,int);
 extern void extract_and_save_path(struct tcb *, long, int);
 

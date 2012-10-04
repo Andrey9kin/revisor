@@ -137,6 +137,7 @@ static char *acolumn_spaces;
 static char *outfname = NULL;
 static char *reportfname = NULL;
 static char *ignorefname = NULL;
+static char *inputfname = NULL;
 /* If -ff, points to stderr. Else, it's our common output log */
 static FILE *shared_log;
 
@@ -192,6 +193,7 @@ Main purpose of revisor is to trace file usage during a command execution\n\
 usage: revisor -o file [-i file] [-h] [-v] PROG [ARGS]\n\
 -o file -- report file\n\
 -i file -- file with ignore rules\n\
+-c file -- report from prev build. Revisor will parse it and execute command only if any file was changed\n\ 
 -h      -- show this message\n\
 -v      -- show version\n");
 	exit(exitval);
@@ -920,7 +922,7 @@ startup_child(char **argv)
 {
 	struct stat statbuf;
 	const char *filename;
-	char pathname[MAXPATHLEN];
+	char pathname[PATH_MAX];
 	int pid = 0;
 	struct tcb *tcp;
 
@@ -954,7 +956,7 @@ startup_child(char **argv)
 			else
 				m = n = strlen(path);
 			if (n == 0) {
-				if (!getcwd(pathname, MAXPATHLEN))
+				if (!getcwd(pathname, PATH_MAX))
 					continue;
 				len = strlen(pathname);
 			}
@@ -1429,7 +1431,7 @@ init(int argc, char *argv[])
 	followfork++;
 	qflag = 1;
 	outfname = strdup("/dev/null");
-	while ((c = getopt(argc, argv,"+vh" "o:i:")) != EOF) {
+	while ((c = getopt(argc, argv,"+vh" "c:o:i:")) != EOF) {
 		switch (c) {
 		case 'h':
 			usage(stdout, 0);
@@ -1443,6 +1445,9 @@ init(int argc, char *argv[])
 			break;
 		case 'i':
 			ignorefname = strdup(optarg);
+			break;
+		case 'c':
+			inputfname = strdup(optarg);
 			break;
 		default:
 			usage(stderr, 1);
@@ -2049,7 +2054,28 @@ trace(void)
 int
 main(int argc, char *argv[])
 {
+        int ret_code = REVISOR_TRIGGER_ERROR;
+ 
 	init(argc, argv);
+
+	/* Check input files from input file for changes
+	   and exit if no changes found or error happened
+	   duirng verefication */
+	ret_code = check_for_changes(inputfname);
+	
+	if (ret_code == REVISOR_TRIGGER_ERROR) {
+	  fprintf(stderr,"Error during files check\n");
+	  return 1;
+	} else if (ret_code == REVISOR_TRIGGER_NO_CHANGES_FOUND) {
+	  fprintf(stdout,"No changes found. Skip command execution\n");
+	  return 0;
+	} else if (ret_code == REVISOR_TRIGGER_CHANGES_FOUND) {
+	  fprintf(stdout,"New changes found. Executing provided command...\n");
+	} else {
+	  fprintf(stderr,"Internal error! Unexpected vlaue(%d) for "
+		  "check_for_changes function return code\n", ret_code);
+	  return 1;
+	}
 
 	if (init_tree_structures() != EXIT_SUCCESS) {
 	  fprintf(stderr,"Error during data structure initialization\n");

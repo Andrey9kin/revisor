@@ -912,7 +912,7 @@ int
 sys_execve(struct tcb *tcp)
 {
 	if (entering(tcp)) {
-		extract_and_save_path(tcp, tcp->u_arg[0], FTRACE_NOK);
+		extract_and_save_path(tcp, tcp->u_arg[0], REVISOR_MODE_OPEN);
 	}
 	return 0;
 }

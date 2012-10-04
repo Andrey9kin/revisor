@@ -18,12 +18,7 @@
 #include <regex.h>
 #include <glib.h>
 
-#ifndef PATH_MAX
-#define PATH_MAX 2000
-#endif
-
 #define REGEX_MAX 1000
-
 
 /* used to keep track of */
 int sorted_files_index_g;
@@ -41,8 +36,6 @@ GTree *ignore_files_tree_g;
 /* Used for storing pre-compiled regex exclusion patterns */
 regex_t *exclude_patterns_compiled_regex_g[REGEX_MAX];
 
-
-
 /* Move files from tree to sorted array
 */
 gboolean
@@ -59,8 +52,6 @@ void
 destroy_key(gpointer data) {
   free((char *)data);
 }
-
-
 
 /* Handle opened file
  */
@@ -327,6 +318,106 @@ dump_result_to_file(char* reportfname)
   }
 
   return EXIT_SUCCESS;
+}
+
+/* Read report and check fiels for changes
+ */
+int
+check_for_changes(char* inputfname)
+{
+  unsigned char ucurrent_hash[mhash_get_block_size(MHASH_MD5)];
+  char temp_buffer[PATH_MAX + mhash_get_block_size(MHASH_MD5) +1];
+  char input_hash[mhash_get_block_size(MHASH_MD5)];
+  char current_hash[mhash_get_block_size(MHASH_MD5)*2 +1];
+  int i = 0;
+  char *loc_ptr = NULL;
+  FILE *fp_ptr = NULL;
+  struct stat file_stat;
+
+  /* No file no check */
+  if (inputfname == NULL)
+    return REVISOR_TRIGGER_CHANGES_FOUND;
+
+  /* Still, no file no check */
+  if (stat(inputfname, &file_stat) < 0) {
+    return REVISOR_TRIGGER_CHANGES_FOUND;
+  }
+
+  /* Read input file */
+  fp_ptr=fopen(inputfname, "r");
+
+  /* Open file failed */
+  if (fp_ptr == NULL) {
+    fprintf(stderr,"Failed to open %s\n",inputfname);
+    fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
+    return REVISOR_TRIGGER_ERROR;
+  }
+
+  /* Read file till the end */
+  while(fgets(temp_buffer,PATH_MAX,fp_ptr) != NULL) {
+    
+    /* Remove newline character added by fgets */
+    if( temp_buffer[strlen(temp_buffer)-1] == '\n' )
+       temp_buffer[strlen(temp_buffer)-1] = 0;
+
+    /* check line for delimeter and get pointer to the hash */
+    loc_ptr = strtok(temp_buffer,"\t");
+
+    /* Something wrong with input file structure */
+    if (loc_ptr == NULL) {
+      fprintf(stderr,"Could not find delimiter in the %s line\n",temp_buffer);
+      return REVISOR_TRIGGER_ERROR;
+    }
+
+    /* Copy hash to separate variable */
+    if (!strcpy(input_hash,loc_ptr)) {
+	fprintf(stderr,"Failed to extract hash from %s\n",temp_buffer);
+	fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
+	return REVISOR_TRIGGER_ERROR;
+    }
+
+    /* Get pointer to path */
+    loc_ptr = strtok(NULL, "\t");
+
+    /* Something wrong with input file structure */
+    if (loc_ptr == NULL) {
+      fprintf(stderr,"Could not find path in the %s line\n",temp_buffer);
+      return REVISOR_TRIGGER_ERROR;
+    }
+
+    /* Calculate md5 for the file extracted from the input file */
+    if (calculate_md5((unsigned char*)&ucurrent_hash, loc_ptr) != 0) {
+      fprintf(stderr, "Failed to calculate md5 for '%s'\n", loc_ptr);
+      return REVISOR_TRIGGER_ERROR;
+    }
+
+    /* We need to transform hash to string to be able to compare it
+       with hash from the file */
+    for(i=0;i<mhash_get_block_size(MHASH_MD5);i++) {
+      sprintf(&current_hash[2*i], "%.2x", ucurrent_hash[i]);
+    }
+
+    /* Compare hash's */
+    if (strcmp(current_hash,input_hash) != 0) {
+      /* Changes found. Return success to continue with build */
+      /* Close file failed */
+      if (fclose(fp_ptr) != 0) {
+	fprintf(stderr,"Failed to close %s\n",inputfname);
+	fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
+	return REVISOR_TRIGGER_ERROR;
+      }
+      return  REVISOR_TRIGGER_CHANGES_FOUND;
+    }
+  }
+
+  /* Close file failed */
+  if (fclose(fp_ptr) != 0) {
+    fprintf(stderr,"Failed to close %s\n",inputfname);
+    fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
+    return REVISOR_TRIGGER_ERROR;
+  }
+
+  return REVISOR_TRIGGER_NO_CHANGES_FOUND;
 }
 
 /* Create the binary tree-structure

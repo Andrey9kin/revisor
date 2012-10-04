@@ -392,25 +392,24 @@ tprint_open_modes(mode_t flags)
 }
 
 /*
- * low bits of the open(2) flags define access mode,
- * other bits are real flags.
+ * is O_CREAT flag set in provided access mode
  */
 int
-is_open_flag(mode_t flags,int flag)
+is_creat_mode(mode_t flags)
 {
 	if (xlookup(open_access_modes, flags & 3))
 	  flags &= ~3;
 
-	if ((flags & flag) == flag)
-	  return FTRACE_OK;
-	return FTRACE_NOK;
+	if ((flags & O_CREAT) == O_CREAT)
+	  return REVISOR_MODE_CREATE;
+	return REVISOR_MODE_OPEN;
 }
 
 static int
 decode_open(struct tcb *tcp, int offset)
 {
   if (entering(tcp))
-    extract_and_save_path(tcp, tcp->u_arg[0],is_open_flag(tcp->u_arg[offset+1],O_CREAT));
+    extract_and_save_path(tcp, tcp->u_arg[0],is_creat_mode(tcp->u_arg[offset+1]));
   return 0;
 }
 
@@ -467,7 +466,7 @@ int
 sys_creat(struct tcb *tcp)
 {
   if (entering(tcp))
-    extract_and_save_path(tcp, tcp->u_arg[0],FTRACE_OK);
+    extract_and_save_path(tcp, tcp->u_arg[0],REVISOR_MODE_CREATE);
   return 0;
 }
 
