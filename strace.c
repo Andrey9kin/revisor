@@ -190,10 +190,10 @@ usage(FILE *ofp, int exitval)
 Revisor is a very limited version of strace 4.7 (http://sourceforge.net/projects/strace)\n\
 Main purpose of revisor is to trace file usage during a command execution\n\
 \n\
-usage: revisor -o file [-i file] [-h] [-v] PROG [ARGS]\n\
+usage: revisor -o file [-i file] [-c file] [-h] [-v] PROG [ARGS]\n\
 -o file -- report file\n\
 -i file -- file with ignore rules\n\
--c file -- report from prev build. Revisor will parse it and execute command only if any file was changed\n\ 
+-c file -- report from prev build. Revisor will parse it and execute command only if any file was changed\n\
 -h      -- show this message\n\
 -v      -- show version\n");
 	exit(exitval);
@@ -1424,10 +1424,10 @@ init(int argc, char *argv[])
 	shared_log = stderr;
 	set_sortby(DEFAULT_SORTBY);
 	set_personality(DEFAULT_PERSONALITY);
-	qualify("trace=open,openat,creat,execve");
 	qualify("abbrev=all");
 	qualify("verbose=all");
 	qualify("signal=all");
+	qualify("trace=open,openat,creat,execve,rename,link,symlink");
 	followfork++;
 	qflag = 1;
 	outfname = strdup("/dev/null");
