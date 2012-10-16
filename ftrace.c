@@ -26,6 +26,7 @@
 
 /* This is the last created file (it probably didn't exist before the call to create) */
 char *last_created_g;
+
 /* used to keep track of */
 int sorted_files_index_g;
 
@@ -318,7 +319,7 @@ calculate_md5(unsigned char *to, const char *file_path)
 /* Agregate results and put them to report file
  */
 int
-dump_result_to_file(char* reportfname)
+dump_result_to_file(char* reportfname, const char* old_root, const char* new_root)
 {
   int i = 0;
   int j = 0;
@@ -362,7 +363,15 @@ dump_result_to_file(char* reportfname)
     for (j = 0; j < mhash_get_block_size(MHASH_MD5); j++) {
       fprintf(fp,"%.2x",hash[j]);
     }
-    fprintf(fp,"\t%s\n", sorted_files_g[i]);
+
+    if(old_root != NULL && new_root != NULL) {
+      if(strstr(sorted_files_g[i], old_root))
+        fprintf(fp,"\t$%s%s\n", new_root, sorted_files_g[i] + strlen(old_root));
+      else
+        fprintf(fp,"\t%s\n", sorted_files_g[i]);
+    } else {
+      fprintf(fp,"\t%s\n", sorted_files_g[i]);
+    }
   }
 
   /* free memory used by tree (this will also free 'sorted_files_g' since it point to the same memory */

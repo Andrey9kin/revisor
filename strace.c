@@ -137,6 +137,7 @@ static char *acolumn_spaces;
 static char *outfname = NULL;
 static char *reportfname = NULL;
 static char *ignorefname = NULL;
+static char *substitute = NULL;
 /* If -ff, points to stderr. Else, it's our common output log */
 static FILE *shared_log;
 
@@ -193,7 +194,8 @@ usage: revisor -o file [-i file] [-h] [-v] PROG [ARGS]\n\
 -o file -- report file\n\
 -i file -- file with ignore rules\n\
 -h      -- show this message\n\
--v      -- show version\n");
+-v      -- show version\n\
+-s      -- use an environment variable to substitute the begining of a path\n");
 	exit(exitval);
 }
 
@@ -1417,7 +1419,7 @@ init(int argc, char *argv[])
 	followfork++;
 	qflag = 1;
 	outfname = strdup("/dev/null");
-	while ((c = getopt(argc, argv,"+vh" "o:i:")) != EOF) {
+	while ((c = getopt(argc, argv,"+vh" "o:i:s:")) != EOF) {
 		switch (c) {
 		case 'h':
 			usage(stdout, 0);
@@ -1432,6 +1434,9 @@ init(int argc, char *argv[])
 		case 'i':
 			ignorefname = strdup(optarg);
 			break;
+		case 's':
+			substitute = strdup(optarg);
+			break;
 		default:
 			usage(stderr, 1);
 			break;
@@ -1443,6 +1448,13 @@ init(int argc, char *argv[])
 	if (reportfname == NULL) {
 	  fprintf(stderr,"-o argument is mandatory\n");
 	    usage(stderr, 1);
+	}
+
+	if (substitute != NULL) {
+ 	  if(getenv(substitute) == NULL) {
+	    fprintf(stderr,"the environment variable name supplied with '-s' must be available\n");
+	      usage(stderr, 1);
+ 	  }
 	}
 
 	acolumn_spaces = malloc(acolumn + 1);
@@ -2037,6 +2049,7 @@ trace(void)
 int
 main(int argc, char *argv[])
 {
+        char* env_path = NULL;
 	init(argc, argv);
 
 	if (init_tree_structures() != EXIT_SUCCESS) {
@@ -2053,7 +2066,12 @@ main(int argc, char *argv[])
 	if (trace() < 0)
 	  return 1;
 
-	if (dump_result_to_file(reportfname) != EXIT_SUCCESS) {
+        /* getenv with NULL as argument will result in Segmentation fault */
+        if(substitute != NULL) {
+          env_path = getenv(substitute);
+        }
+
+	if (dump_result_to_file(reportfname, env_path, substitute) != EXIT_SUCCESS) {
 	  fprintf(stderr,"Error during writing results\n");
 	  return 1;
 	}
