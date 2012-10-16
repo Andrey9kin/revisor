@@ -24,7 +24,8 @@
 
 #define REGEX_MAX 1000
 
-
+/* This is the last created file (it probably didn't exist before the call to create) */
+char *last_created_g;
 /* used to keep track of */
 int sorted_files_index_g;
 
@@ -60,7 +61,54 @@ destroy_key(gpointer data) {
   free((char *)data);
 }
 
+/* This function should only be called on files that exist
+*/
+int
+add_file_to_ignore_filter(char* path_ptr)
+{
+  char *path;
+  char absp[PATH_MAX];
 
+  /* get absolute path */
+  if (realpath(path_ptr, absp) == NULL) {
+    fprintf(stderr, "realpath failed for %s\n",path_ptr);
+    fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
+    return EXIT_FAILURE;
+  }
+
+  /* Exit function if path already is in the tree  */
+  if(g_tree_lookup(ignore_files_tree_g, absp) != NULL) {
+    return EXIT_SUCCESS;
+  }
+
+  /* Store string in ignore tree */
+  path = strdup(absp);
+  g_tree_insert(ignore_files_tree_g, path, &tree_value_g);
+
+  return EXIT_SUCCESS;
+}
+
+/* Check if the file should be processed (added to tracking and/or ignore filter)
+*/
+int
+should_file_be_processed(char* path_ptr)
+{
+  struct stat file_stat;
+
+  /* Skip files that doesn't exist */
+  if (stat(path_ptr, &file_stat) < 0)
+    return 0;
+
+  /* Not intrested in directories */
+  if (S_ISDIR(file_stat.st_mode))
+    return 0;
+
+  /* TODO: get actual file and check */
+  if (S_ISLNK(file_stat.st_mode))
+    return 0;
+
+  return 1;
+}
 
 /* Handle opened file
  */
@@ -72,20 +120,21 @@ handle_opened_file(char* path_ptr)
   char *path;
   char absp[PATH_MAX];
   char msgbuf[100];
-  struct stat file_stat;
   regex_t regex;
 
-  /* Skip files that doesn't exist */
-  if (stat(path_ptr, &file_stat) < 0)
-    return EXIT_SUCCESS;
+  /* Check file from last ignore call */
+  if(last_created_g != NULL) {
+    if(should_file_be_processed(last_created_g)) {
+      add_file_to_ignore_filter(last_created_g);
+      free((char *)last_created_g);
+      last_created_g = NULL;
+    }
+  }
 
-  /* Not intrested in directories */
-  if (S_ISDIR(file_stat.st_mode))
+  /* Check if file should be processed */
+  if(!should_file_be_processed(path_ptr)) {
     return EXIT_SUCCESS;
-
-  /* TODO: get actual file and check */
-  if (S_ISLNK(file_stat.st_mode))
-    return EXIT_SUCCESS;
+  }
 
   if (realpath(path_ptr, absp) == NULL) {
     fprintf(stderr, "realpath failed for %s\n",path_ptr);
@@ -139,22 +188,32 @@ handle_opened_file(char* path_ptr)
   return EXIT_SUCCESS;
 }
 
-/* Handle opened file
+
+/* Handle file that should be ignored
  */
 int
 update_ignore_list(char* path_ptr)
 {
-  char *path;
-
-  /* Exit function if path already is in the tree  */
-  if(g_tree_lookup(ignore_files_tree_g, path_ptr) != NULL) {
-    return EXIT_SUCCESS;
+  /* Check file from last ignore call */
+  if(last_created_g != NULL)
+  {
+    if(should_file_be_processed(last_created_g)) {
+      add_file_to_ignore_filter(last_created_g);
+      free((char *)last_created_g);
+      last_created_g = NULL;
+    }
   }
 
-  /* Store string in ignore tree */
-  path = strdup(path_ptr);
-  g_tree_insert(ignore_files_tree_g, path, &tree_value_g);
-
+  /* Check file for this ignore */
+  if(should_file_be_processed(path_ptr)) {
+    add_file_to_ignore_filter(path_ptr);
+  } else {
+    /* Change so that 'path_ptr'-path is stored in 'last_created_g' */
+    if(last_created_g != NULL) {
+      free((char *)last_created_g);
+    }
+    last_created_g = strdup(path_ptr);
+  }
   return EXIT_SUCCESS;
 }
 
@@ -335,6 +394,9 @@ int
 init_tree_structures() {
   /* Set a value so that it isn't zero */
   tree_value_g = 42;
+
+  /* Should always be null at execution start */
+  last_created_g = NULL;
 
   tracked_files_tree_g = g_tree_new_full((GCompareDataFunc)g_ascii_strcasecmp, NULL, (GDestroyNotify)destroy_key, NULL);
   if(tracked_files_tree_g == NULL) {
