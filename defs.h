@@ -507,7 +507,7 @@ int strace_vfprintf(FILE *fp, const char *fmt, va_list args);
 
 extern int init_tree_structures();
 extern int load_exclude_rules(char* );
-extern int dump_result_to_file(char* );
+extern int dump_result_to_file(char*, const char*, const char*);
 extern int handle_opened_file(char* );
 extern int update_ignore_list(char* );
 extern int check_for_changes(char* );

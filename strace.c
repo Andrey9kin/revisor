@@ -139,6 +139,7 @@ static char *outfname = NULL;
 static char *reportfname = NULL;
 static char *ignorefname = NULL;
 static char *inputfname = NULL;
+static char *substitute = NULL;
 /* If -ff, points to stderr. Else, it's our common output log */
 static FILE *shared_log;
 
@@ -199,8 +200,10 @@ usage: revisor -o file [-i file] [-c file] [-h] [-v] PROG [ARGS]\n\
 -n file -- the same as -c but command will be executed without tracking. Revisor will parse report and\n\
            in case of changes will execute provided command as separate proceess but no tracking of the\n\
            new procees will be done. Literally revisor process will be killed right after command process fork\n\
--h      -- show this message\n\
--v      -- show version\n");
+-s name -- specify one or multiple enviroment variables for path substitution. Revisor will read the environment\n\
+           variables and match them with the path's in the report. Matches will be replaced with the variable name\n\
+-v      -- show version\n\
+-h      -- show this message\n");
   exit(exitval);
 }
 
@@ -1439,32 +1442,35 @@ init(int argc, char *argv[])
 	followfork++;
 	qflag = 1;
 	outfname = strdup("/dev/null");
-	while ((c = getopt(argc, argv,"+vh" "c:o:i:n:")) != EOF) {
-		switch (c) {
-		case 'h':
-			usage(stdout, 0);
-			break;
-		case 'v':
-			printf("%s -- version %s\n", PACKAGE_NAME, VERSION);
-			exit(0);
-			break;
-		case 'o':
-			reportfname = strdup(optarg);
-			break;
-		case 'i':
-			ignorefname = strdup(optarg);
-			break;
-		case 'c':
-			inputfname = strdup(optarg);
-			break;
-		case 'n':
-			inputfname = strdup(optarg);
-			die_after_child_start = 1;
-			break;
-		default:
-			usage(stderr, 1);
-			break;
-		}
+	while ((c = getopt(argc, argv,"+vh" "c:o:i:n:s:")) != EOF) {
+	  switch (c) {
+	  case 'h':
+	    usage(stdout, 0);
+	    break;
+	  case 'v':
+	    printf("%s -- version %s\n", PACKAGE_NAME, VERSION);
+	    exit(0);
+	    break;
+	  case 'o':
+	    reportfname = strdup(optarg);
+	    break;
+	  case 'i':
+	    ignorefname = strdup(optarg);
+	    break;
+	  case 'c':
+	    inputfname = strdup(optarg);
+	    break;
+	  case 'n':
+	    inputfname = strdup(optarg);
+	    die_after_child_start = 1;
+	    break;
+	  case 's':
+	    substitute = strdup(optarg);
+	    break;
+	  default:
+	    usage(stderr, 1);
+	    break;
+	  }
 	}
 	argv += optind;
 	/* argc -= optind; - no need, argc is not used below */
@@ -1474,11 +1480,18 @@ init(int argc, char *argv[])
 	    usage(stderr, 1);
 	}
 
+	if (substitute != NULL) {
+ 	  if(getenv(substitute) == NULL) {
+	    fprintf(stderr,"the environment variable name supplied with '-s' must be available\n");
+	    usage(stderr, 1);
+ 	  }
+	}
+
 	/* Check input files from input file for changes
 	   and exit if no changes found or error happened
 	   duirng verefication */
 	ret_code = check_for_changes(inputfname);
-
+	
 	if (ret_code == REVISOR_TRIGGER_ERROR) {
 	  fprintf(stderr,"Error during files check\n");
 	  exit(1);
@@ -1492,7 +1505,7 @@ init(int argc, char *argv[])
 		  "check_for_changes function return code\n", ret_code);
 	  exit(1);
 	}
-
+	  
 	acolumn_spaces = malloc(acolumn + 1);
 	if (!acolumn_spaces)
 		die_out_of_memory();
@@ -2085,6 +2098,7 @@ trace(void)
 int
 main(int argc, char *argv[])
 {
+        char* env_path = NULL;
 	init(argc, argv);
 
 	if (init_tree_structures() != EXIT_SUCCESS) {
@@ -2101,7 +2115,12 @@ main(int argc, char *argv[])
 	if (trace() < 0)
 	  return 1;
 
-	if (dump_result_to_file(reportfname) != EXIT_SUCCESS) {
+        /* getenv with NULL as argument will result in Segmentation fault */
+        if(substitute != NULL) {
+          env_path = getenv(substitute);
+        }
+
+	if (dump_result_to_file(reportfname, env_path, substitute) != EXIT_SUCCESS) {
 	  fprintf(stderr,"Error during writing results\n");
 	  return 1;
 	}
