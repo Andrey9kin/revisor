@@ -114,6 +114,9 @@ extern char *stpcpy(char *dst, const char *src);
 #ifndef MAX_ARGS
 # define MAX_ARGS	6
 #endif
+#ifndef MAX_S_ENV
+# define MAX_S_ENV	32
+#endif
 /* default sorting method for call profiling */
 #ifndef DEFAULT_SORTBY
 # define DEFAULT_SORTBY "time"
@@ -498,7 +501,7 @@ int strace_vfprintf(FILE *fp, const char *fmt, va_list args);
 
 extern int init_tree_structures();
 extern int load_exclude_rules(char* );
-extern int dump_result_to_file(char*, const char*, const char*);
+extern int dump_result_to_file(char*, char**);
 extern int handle_opened_file(char* );
 extern int update_ignore_list(char* );
 extern int is_open_flag(mode_t,int);
