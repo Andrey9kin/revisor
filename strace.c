@@ -121,6 +121,7 @@ bool tracing_paths = 0;
 
 static bool detach_on_execve = 0;
 static bool skip_startup_execve = 0;
+static bool die_after_child_start = 0;
 
 static int exit_code = 0;
 static int strace_child = 0;
@@ -186,17 +187,21 @@ strerror(int err_no)
 static void
 usage(FILE *ofp, int exitval)
 {
-	fprintf(ofp, "\
+  fprintf(ofp, "\
 Revisor is a very limited version of strace 4.7 (http://sourceforge.net/projects/strace)\n\
 Main purpose of revisor is to trace file usage during a command execution\n\
 \n\
 usage: revisor -o file [-i file] [-c file] [-h] [-v] PROG [ARGS]\n\
--o file -- report file\n\
+-o file -- output file to store report file\n\
 -i file -- file with ignore rules\n\
--c file -- report from prev build. Revisor will parse it and execute command only if any file was changed\n\
+-c file -- do conditional execution based on provided revisor report. Revisor will parse provided report and\n\
+           execute command only if any file was changed\n\
+-n file -- the same as -c but command will be executed without tracking. Revisor will parse report and\n\
+           in case of changes will execute provided command as separate proceess but no tracking of the\n\
+           new procees will be done. Literally revisor process will be killed right after command process fork\n\
 -h      -- show this message\n\
 -v      -- show version\n");
-	exit(exitval);
+  exit(exitval);
 }
 
 static void die(void) __attribute__ ((noreturn));
@@ -1047,6 +1052,20 @@ startup_child(char **argv)
 	}
 
 	/* We are the tracer */
+	if (die_after_child_start) {
+	  int status;
+	  /* Wait for child status change */
+	  pid = waitpid(pid, &status, __WALL);
+	  if (pid == -1) {
+	    perror_msg_and_die("waitpid");
+	  }
+	  /* Detach from the child */
+	  if (ptrace(PTRACE_DETACH,pid,NULL,NULL)<0) {
+	    perror_msg_and_die("ptrace(PTRACE_TRACEME, ...)");
+	  }
+	  /* Parent exit, child continue to leave */
+	  exit(0);
+	}
 
 	if (!daemonized_tracer) {
 		if (!use_seize) {
@@ -1395,6 +1414,7 @@ init(int argc, char *argv[])
 	struct tcb *tcp;
 	int c;
 	int optF = 0;
+        int ret_code = REVISOR_TRIGGER_ERROR;
 	struct sigaction sa;
 
 	progname = argv[0] ? argv[0] : "revisor";
@@ -1431,7 +1451,7 @@ init(int argc, char *argv[])
 	followfork++;
 	qflag = 1;
 	outfname = strdup("/dev/null");
-	while ((c = getopt(argc, argv,"+vh" "c:o:i:")) != EOF) {
+	while ((c = getopt(argc, argv,"+vh" "c:o:i:n:")) != EOF) {
 		switch (c) {
 		case 'h':
 			usage(stdout, 0);
@@ -1449,6 +1469,10 @@ init(int argc, char *argv[])
 		case 'c':
 			inputfname = strdup(optarg);
 			break;
+		case 'n':
+			inputfname = strdup(optarg);
+			die_after_child_start = 1;
+			break;
 		default:
 			usage(stderr, 1);
 			break;
@@ -1457,9 +1481,28 @@ init(int argc, char *argv[])
 	argv += optind;
 	/* argc -= optind; - no need, argc is not used below */
 
-	if (reportfname == NULL) {
+	if ((reportfname == NULL) && (die_after_child_start == 0)) {
 	  fprintf(stderr,"-o argument is mandatory\n");
 	    usage(stderr, 1);
+	}
+
+	/* Check input files from input file for changes
+	   and exit if no changes found or error happened
+	   duirng verefication */
+	ret_code = check_for_changes(inputfname);
+
+	if (ret_code == REVISOR_TRIGGER_ERROR) {
+	  fprintf(stderr,"Error during files check\n");
+	  exit(1);
+	} else if (ret_code == REVISOR_TRIGGER_NO_CHANGES_FOUND) {
+	  fprintf(stdout,"No changes found. Skip command execution\n");
+	  exit(0);
+	} else if (ret_code == REVISOR_TRIGGER_CHANGES_FOUND) {
+	  fprintf(stdout,"New changes found. Executing provided command...\n");
+	} else {
+	  fprintf(stderr,"Internal error! Unexpected value(%d) for "
+		  "check_for_changes function return code\n", ret_code);
+	  exit(1);
 	}
 
 	acolumn_spaces = malloc(acolumn + 1);
@@ -2054,28 +2097,7 @@ trace(void)
 int
 main(int argc, char *argv[])
 {
-        int ret_code = REVISOR_TRIGGER_ERROR;
- 
 	init(argc, argv);
-
-	/* Check input files from input file for changes
-	   and exit if no changes found or error happened
-	   duirng verefication */
-	ret_code = check_for_changes(inputfname);
-	
-	if (ret_code == REVISOR_TRIGGER_ERROR) {
-	  fprintf(stderr,"Error during files check\n");
-	  return 1;
-	} else if (ret_code == REVISOR_TRIGGER_NO_CHANGES_FOUND) {
-	  fprintf(stdout,"No changes found. Skip command execution\n");
-	  return 0;
-	} else if (ret_code == REVISOR_TRIGGER_CHANGES_FOUND) {
-	  fprintf(stdout,"New changes found. Executing provided command...\n");
-	} else {
-	  fprintf(stderr,"Internal error! Unexpected vlaue(%d) for "
-		  "check_for_changes function return code\n", ret_code);
-	  return 1;
-	}
 
 	if (init_tree_structures() != EXIT_SUCCESS) {
 	  fprintf(stderr,"Error during data structure initialization\n");
