@@ -313,10 +313,11 @@ calculate_md5(unsigned char *to, const char *file_path)
 /* Agregate results and put them to report file
  */
 int
-dump_result_to_file(char* reportfname, const char* old_root, const char* new_root)
+dump_result_to_file(char* reportfname, char** substitute_environment_variables)
 {
   int i = 0;
   int j = 0;
+  int k = 0;
   int nnodes = 0;;
   FILE *fp = NULL;
   unsigned char hash[mhash_get_block_size(MHASH_MD5)];
@@ -358,13 +359,19 @@ dump_result_to_file(char* reportfname, const char* old_root, const char* new_roo
       fprintf(fp,"%.2x",hash[j]);
     }
 
-    if(old_root != NULL && new_root != NULL) {
-      if(strstr(sorted_files_g[i], old_root))
-        fprintf(fp,"\t$%s%s\n", new_root, sorted_files_g[i] + strlen(old_root));
-      else
+
+    for(k = 0;k < MAX_S_ENV;k++) {
+      if (substitute_environment_variables[k] == NULL) {
+        /* No match */
         fprintf(fp,"\t%s\n", sorted_files_g[i]);
-    } else {
-      fprintf(fp,"\t%s\n", sorted_files_g[i]);
+        break;
+      }
+      char* env_str = getenv(substitute_environment_variables[k]);
+      if(strstr(sorted_files_g[i], env_str)) {
+        /* Match */
+        fprintf(fp,"\t$%s%s\n", substitute_environment_variables[k], sorted_files_g[i] + strlen(env_str));
+        break;
+      }
     }
   }
 

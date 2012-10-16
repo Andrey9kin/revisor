@@ -139,7 +139,7 @@ static char *outfname = NULL;
 static char *reportfname = NULL;
 static char *ignorefname = NULL;
 static char *inputfname = NULL;
-static char *substitute = NULL;
+static char *substitute_environment_variables[MAX_S_ENV];
 /* If -ff, points to stderr. Else, it's our common output log */
 static FILE *shared_log;
 
@@ -192,7 +192,7 @@ usage(FILE *ofp, int exitval)
 Revisor is a very limited version of strace 4.7 (http://sourceforge.net/projects/strace)\n\
 Main purpose of revisor is to trace file usage during a command execution\n\
 \n\
-usage: revisor -o file [-i file] [-c file] [-h] [-v] PROG [ARGS]\n\
+usage: revisor -o file [-i file] [-c|-n file] [-s ENV] [-h] [-v] PROG [ARGS]\n\
 -o file -- output file to store report file\n\
 -i file -- file with ignore rules\n\
 -c file -- do conditional execution based on provided revisor report. Revisor will parse provided report and\n\
@@ -200,10 +200,10 @@ usage: revisor -o file [-i file] [-c file] [-h] [-v] PROG [ARGS]\n\
 -n file -- the same as -c but command will be executed without tracking. Revisor will parse report and\n\
            in case of changes will execute provided command as separate proceess but no tracking of the\n\
            new procees will be done. Literally revisor process will be killed right after command process fork\n\
--s name -- specify one or multiple enviroment variables for path substitution. Revisor will read the environment\n\
+-s ENV -- specify one or multiple enviroment variables for path substitution. Revisor will read the environment\n\
            variables and match them with the path's in the report. Matches will be replaced with the variable name\n\
--v      -- show version\n\
--h      -- show this message\n");
+-v     -- show version\n\
+-h     -- show this message\n");
   exit(exitval);
 }
 
@@ -1403,6 +1403,8 @@ static void __attribute__ ((noinline))
 init(int argc, char *argv[])
 {
 	struct tcb *tcp;
+	int s_env_c = 0;
+    int i = 0;
 	int c;
 	int optF = 0;
         int ret_code = REVISOR_TRIGGER_ERROR;
@@ -1465,7 +1467,8 @@ init(int argc, char *argv[])
 	    die_after_child_start = 1;
 	    break;
 	  case 's':
-	    substitute = strdup(optarg);
+	    substitute_environment_variables[s_env_c] = strdup(optarg);
+	    s_env_c += 1;
 	    break;
 	  default:
 	    usage(stderr, 1);
@@ -1480,13 +1483,17 @@ init(int argc, char *argv[])
 	    usage(stderr, 1);
 	}
 
-	if (substitute != NULL) {
- 	  if(getenv(substitute) == NULL) {
+	for(i = 0;i < MAX_S_ENV;i++) {
+	  if (substitute_environment_variables[i] == NULL) {
+	    break;
+	  }
+	  if(getenv(substitute_environment_variables[i]) == NULL) {
 	    fprintf(stderr,"the environment variable name supplied with '-s' must be available\n");
+	    fprintf(stderr,"error for variable: %s\n", substitute_environment_variables[i]);
 	    usage(stderr, 1);
  	  }
 	}
-
+	
 	/* Check input files from input file for changes
 	   and exit if no changes found or error happened
 	   duirng verefication */
@@ -1687,6 +1694,20 @@ cleanup(void)
 	}
 	if (cflag)
 		call_summary(shared_log);
+
+	if(outfname != NULL)
+		free((char*)outfname);
+	if(reportfname != NULL)
+		free((char*)reportfname);
+	if(ignorefname != NULL)
+		free((char*)ignorefname);
+
+	for(i = 0;i < MAX_S_ENV;i++) {
+		if (substitute_environment_variables[i] == NULL) {
+			break;
+		}
+		free((char*)substitute_environment_variables[i]);
+	}
 }
 
 static void
@@ -2098,7 +2119,6 @@ trace(void)
 int
 main(int argc, char *argv[])
 {
-        char* env_path = NULL;
 	init(argc, argv);
 
 	if (init_tree_structures() != EXIT_SUCCESS) {
@@ -2115,12 +2135,7 @@ main(int argc, char *argv[])
 	if (trace() < 0)
 	  return 1;
 
-        /* getenv with NULL as argument will result in Segmentation fault */
-        if(substitute != NULL) {
-          env_path = getenv(substitute);
-        }
-
-	if (dump_result_to_file(reportfname, env_path, substitute) != EXIT_SUCCESS) {
+	if (dump_result_to_file(reportfname, substitute_environment_variables) != EXIT_SUCCESS) {
 	  fprintf(stderr,"Error during writing results\n");
 	  return 1;
 	}
