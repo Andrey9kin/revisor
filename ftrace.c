@@ -142,6 +142,11 @@ handle_opened_file(char* path_ptr)
     return EXIT_SUCCESS;
   }
 
+  /* Exit function if path already is in the tree  */
+  if(g_tree_lookup(tracked_files_tree_g, absp) != NULL) {
+    return EXIT_SUCCESS;
+  }
+
   /* Try to apply exclude regexp */
   for (i=0;i<REGEX_MAX;i++) {
     /* skip whole list check, exit loop if first empty slot met */
@@ -166,20 +171,9 @@ handle_opened_file(char* path_ptr)
     }
   }
 
-  /* Exit function if path already is in the tree  */
-  if(g_tree_lookup(tracked_files_tree_g, absp) != NULL) {
-    return EXIT_SUCCESS;
-  }
-
   /* Store string in tracked files */
   path = strdup(absp);
   g_tree_insert(tracked_files_tree_g, path, &tree_value_g);
-
-
-  /* Store string in ignore list */
-  path = strdup(absp);
-  g_tree_insert(ignore_files_tree_g, path, &tree_value_g);
-
 
   return EXIT_SUCCESS;
 }
@@ -426,6 +420,10 @@ dump_result_to_file(char* reportfname, char** substitute_environment_variables)
   for (i = 0; i < nnodes; i++) {
     if(sorted_files_g[i] == NULL)
       break;
+
+    /* Additional check in case of race conditionds  */
+    if(g_tree_lookup(ignore_files_tree_g, sorted_files_g[i]) != NULL)
+      continue;
 
     /* Calculate md5 */
     if(calculate_md5((unsigned char*)&hash, sorted_files_g[i]) != 0) {
