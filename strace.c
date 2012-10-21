@@ -3,6 +3,7 @@
  * Copyright (c) 1993 Branko Lankester <branko@hacktic.nl>
  * Copyright (c) 1993, 1994, 1995, 1996 Rick Sladkey <jrs@world.std.com>
  * Copyright (c) 1996-1999 Wichert Akkerman <wichert@cistron.nl>
+ * Copyright (c) 2012 Andrey Devyatkin <andrey.a.devyatkin@gmail.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1493,26 +1494,28 @@ init(int argc, char *argv[])
 	    usage(stderr, 1);
  	  }
 	}
-	
-	/* Check input files from input file for changes
+
+	/* Check files from input file for changes
 	   and exit if no changes found or error happened
 	   duirng verefication */
-	ret_code = check_for_changes(inputfname);
+	if (inputfname != NULL) {
+	  ret_code = check_for_changes(inputfname);
 	
-	if (ret_code == REVISOR_TRIGGER_ERROR) {
-	  fprintf(stderr,"Error during files check\n");
-	  exit(1);
-	} else if (ret_code == REVISOR_TRIGGER_NO_CHANGES_FOUND) {
-	  fprintf(stdout,"No changes found. Skip command execution\n");
-	  exit(0);
-	} else if (ret_code == REVISOR_TRIGGER_CHANGES_FOUND) {
-	  fprintf(stdout,"New changes found. Executing provided command...\n");
-	} else {
-	  fprintf(stderr,"Internal error! Unexpected value(%d) for "
-		  "check_for_changes function return code\n", ret_code);
-	  exit(1);
+	  if (ret_code == REVISOR_TRIGGER_ERROR) {
+	    fprintf(stderr,"Error during files check\n");
+	    exit(1);
+	  } else if (ret_code == REVISOR_TRIGGER_NO_CHANGES_FOUND) {
+	    fprintf(stdout,"No changes found. Skip command execution\n");
+	    exit(0);
+	  } else if (ret_code == REVISOR_TRIGGER_CHANGES_FOUND) {
+	    fprintf(stdout,"New changes found. Executing provided command...\n");
+	  } else {
+	    fprintf(stderr,"Internal error! Unexpected value(%d) for "
+		    "check_for_changes function return code\n", ret_code);
+	    exit(1);
+	  }
 	}
-	  
+
 	acolumn_spaces = malloc(acolumn + 1);
 	if (!acolumn_spaces)
 		die_out_of_memory();
