@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to create configure.  Use autoreconf.
 AC_PREREQ(2.57)
-AC_INIT([revisor],[0.1.2])
+AC_INIT([revisor],[0.1.4])
 AC_CONFIG_SRCDIR([strace.c])
 AC_CONFIG_AUX_DIR([.])
 AM_CONFIG_HEADER([config.h])
