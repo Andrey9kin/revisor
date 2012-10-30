@@ -122,7 +122,7 @@ bool tracing_paths = 0;
 
 static bool detach_on_execve = 0;
 static bool skip_startup_execve = 0;
-static bool die_after_child_start = 0;
+static bool do_not_track = 0;
 
 static int exit_code = 0;
 static int strace_child = 0;
@@ -200,7 +200,7 @@ usage: revisor -o file [-i file] [-c|-n file] [-s ENV] [-h] [-v] PROG [ARGS]\n\
            execute command only if any file was changed\n\
 -n file -- the same as -c but command will be executed without tracking. Revisor will parse report and\n\
            in case of changes will execute provided command as separate proceess but no tracking of the\n\
-           new procees will be done. Literally revisor process will be killed right after command process fork\n\
+           new procees will be done.\n\
 -s ENV -- specify one or multiple enviroment variables for path substitution. Revisor will read the environment\n\
            variables and match them with the path's in the report. Matches will be replaced with the variable name\n\
 -v     -- show version\n\
@@ -1044,7 +1044,7 @@ startup_child(char **argv)
 	}
 
 	/* We are the tracer */
-	if (die_after_child_start) {
+	if (do_not_track) {
 	  int status;
 	  /* Wait for child status change */
 	  pid = waitpid(pid, &status, __WALL);
@@ -1055,8 +1055,16 @@ startup_child(char **argv)
 	  if (ptrace(PTRACE_DETACH,pid,NULL,NULL)<0) {
 	    perror_msg_and_die("ptrace(PTRACE_TRACEME, ...)");
 	  }
-	  /* Parent exit, child continue to leave */
-	  exit(0);
+	  /* Wait for process to finish */
+	  pid = waitpid(pid, &status, __WALL);
+	  if (pid == -1) {
+	    perror_msg_and_die("waitpid");
+	  }
+	  if ( status >= 0 && status <= 127) {
+	    exit(status);
+	  } else {
+	    exit(1);
+	  }
 	}
 
 	if (!daemonized_tracer) {
@@ -1465,7 +1473,7 @@ init(int argc, char *argv[])
 	    break;
 	  case 'n':
 	    inputfname = strdup(optarg);
-	    die_after_child_start = 1;
+	    do_not_track = 1;
 	    break;
 	  case 's':
 	    substitute_environment_variables[s_env_c] = strdup(optarg);
@@ -1479,7 +1487,7 @@ init(int argc, char *argv[])
 	argv += optind;
 	/* argc -= optind; - no need, argc is not used below */
 
-	if ((reportfname == NULL) && (die_after_child_start == 0)) {
+	if ((reportfname == NULL) && (do_not_track == 0)) {
 	  fprintf(stderr,"-o argument is mandatory\n");
 	    usage(stderr, 1);
 	}
