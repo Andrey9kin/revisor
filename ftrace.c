@@ -544,6 +544,14 @@ check_for_changes(char* inputfname)
       return REVISOR_TRIGGER_ERROR;
     }
 
+    /* Can't find file from the report - consider rebuild */
+    if (stat(path, &file_stat) < 0) {
+      fprintf(stdout, "%s stated in %s was not found. Consider rebuild\n",
+	      path,
+	      inputfname);
+      return REVISOR_TRIGGER_CHANGES_FOUND;
+    }
+
     /* Calculate md5 for the file extracted from the input file */
     if (calculate_md5((unsigned char*)&ucurrent_hash, path) != 0) {
       fprintf(stderr, "Failed to calculate md5 for '%s'\n", path);

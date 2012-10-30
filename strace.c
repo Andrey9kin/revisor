@@ -1516,7 +1516,7 @@ init(int argc, char *argv[])
 	    fprintf(stdout,"No changes found. Skip command execution\n");
 	    exit(0);
 	  } else if (ret_code == REVISOR_TRIGGER_CHANGES_FOUND) {
-	    fprintf(stdout,"New changes found. Executing provided command...\n");
+	    fprintf(stdout,"Changes found. Executing provided command...\n");
 	  } else {
 	    fprintf(stderr,"Internal error! Unexpected value(%d) for "
 		    "check_for_changes function return code\n", ret_code);
