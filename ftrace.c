@@ -39,6 +39,72 @@ GTree *ignore_files_tree_g;
 /* Used for storing pre-compiled regex exclusion patterns */
 regex_t *exclude_patterns_compiled_regex_g[REGEX_MAX];
 
+/* Remove /bla/../bla and /bla/./bla/ patterns from the path */
+int
+normalize_path(char *output, char *input) {
+  char result[PATH_MAX]="";
+  size_t resultlen = 0;
+  size_t currentlen = 0;
+
+  char *current = input;
+  char *end = &input[strlen(input)];
+  char *next = NULL;
+  char *slash = NULL;
+
+  /* Check input */
+  if (input == NULL) {
+    fprintf(stderr,"Internal error! Empty input for %s\n",
+	    __FUNCTION__);
+    return EXIT_FAILURE;
+  }
+
+  /* Go slash by slash and fix stuff if we have sonething to fix */
+  for (current = input; current < end; current=next+1) {
+    /* Get pointer to next slash */
+    next = memchr(current, '/', end-current);
+
+    /* stop if not found */
+    if (next == NULL) {
+      next = end;
+    }
+
+    /* Calculate len of current segment */
+    currentlen = next-current;
+
+    /* if current segment len is one or two then we check them */
+    switch(currentlen) {
+    case 2:
+      if (current[0] == '.' && current[1] == '.') {
+	slash = memrchr(result, '/', resultlen);
+	if (slash != NULL) {
+	  resultlen = slash - result;
+	}
+	continue;
+      }
+      break;
+    case 1:
+      if (current[0] == '.') {
+	continue;
+      }
+      break;
+    case 0:
+      continue;
+    }
+    result[resultlen++] = '/';
+    memcpy(&result[resultlen], current, currentlen);
+    resultlen += currentlen;
+  }
+
+  if (resultlen == 0) {
+    result[resultlen++] = '/';
+  }
+
+  result[resultlen] = '\0';
+  strcpy(output,result);
+
+  return EXIT_SUCCESS;
+}
+
 /* Move files from tree to sorted array
 */
 gboolean
@@ -63,6 +129,12 @@ add_file_to_ignore_filter(char* path_ptr)
 {
   char *path;
   char absp[PATH_MAX];
+
+  if (path_ptr == NULL) {
+    fprintf(stderr,"Internal error! Empty input for %s\n",
+	    __FUNCTION__);
+    return EXIT_FAILURE;
+  }
 
   /* get absolute path */
   if (realpath(path_ptr, absp) == NULL) {
@@ -131,9 +203,9 @@ handle_opened_file(char* path_ptr)
     return EXIT_SUCCESS;
   }
 
-  if (realpath(path_ptr, absp) == NULL) {
-    fprintf(stderr, "realpath failed for %s\n",path_ptr);
-    fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
+  /* Fix up path */
+  if (normalize_path(absp, path_ptr) == EXIT_FAILURE) {
+    fprintf(stderr, "Path normalization failed for %s\n",path_ptr);
     return EXIT_FAILURE;
   }
 
@@ -679,3 +751,4 @@ load_exclude_rules(char* ignorefname)
 
   return EXIT_SUCCESS;
 }
+
