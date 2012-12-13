@@ -123,6 +123,7 @@ bool tracing_paths = 0;
 static bool detach_on_execve = 0;
 static bool skip_startup_execve = 0;
 static bool do_not_track = 0;
+static bool lookup_only = 0;
 
 static int exit_code = 0;
 static int strace_child = 0;
@@ -194,13 +195,14 @@ Revisor is a very limited version of strace 4.7 (http://sourceforge.net/projects
 Main purpose of revisor is to trace file usage during a command execution\n\
 \n\
 usage: revisor -o file [-i file] [-c|-n file] [-s ENV] [-h] [-v] PROG [ARGS]\n\
--o file -- output file to store report file\n\
+-o file -- output file to store report\n\
 -i file -- file with ignore rules\n\
 -c file -- do conditional execution based on provided revisor report. Revisor will parse provided report and\n\
            execute command only if any file was changed\n\
 -n file -- the same as -c but command will be executed without tracking. Revisor will parse report and\n\
            in case of changes will execute provided command as separate proceess but no tracking of the\n\
            new procees will be done.\n\
+-l file -- look up for changes for files from provided revisor report. Print difference, do not execute command\n\
 -s ENV -- specify one or multiple enviroment variables for path substitution. Revisor will read the environment\n\
            variables and match them with the path's in the report. Matches will be replaced with the variable name\n\
 -v     -- show version\n\
@@ -1453,7 +1455,7 @@ init(int argc, char *argv[])
 	followfork++;
 	qflag = 1;
 	outfname = strdup("/dev/null");
-	while ((c = getopt(argc, argv,"+vh" "c:o:i:n:s:")) != EOF) {
+	while ((c = getopt(argc, argv,"+vh" "c:o:i:n:s:l:")) != EOF) {
 	  switch (c) {
 	  case 'h':
 	    usage(stdout, 0);
@@ -1475,6 +1477,10 @@ init(int argc, char *argv[])
 	    inputfname = strdup(optarg);
 	    do_not_track = 1;
 	    break;
+	  case 'l':
+	    inputfname = strdup(optarg);
+	    lookup_only = 1;
+	    break;
 	  case 's':
 	    substitute_environment_variables[s_env_c] = strdup(optarg);
 	    s_env_c += 1;
@@ -1487,7 +1493,7 @@ init(int argc, char *argv[])
 	argv += optind;
 	/* argc -= optind; - no need, argc is not used below */
 
-	if ((reportfname == NULL) && (do_not_track == 0)) {
+	if ((reportfname == NULL) && ((do_not_track == 0) && (lookup_only == 0))) {
 	  fprintf(stderr,"-o argument is mandatory\n");
 	    usage(stderr, 1);
 	}
@@ -1507,11 +1513,13 @@ init(int argc, char *argv[])
 	   and exit if no changes found or error happened
 	   duirng verefication */
 	if (inputfname != NULL) {
-	  ret_code = check_for_changes(inputfname);
+	  ret_code = check_for_changes(inputfname, lookup_only);
 	
 	  if (ret_code == REVISOR_TRIGGER_ERROR) {
 	    fprintf(stderr,"Error during files check\n");
 	    exit(1);
+	  } else if (lookup_only == 1) {
+	    exit(0);
 	  } else if (ret_code == REVISOR_TRIGGER_NO_CHANGES_FOUND) {
 	    fprintf(stdout,"No changes found. Skip command execution\n");
 	    exit(0);

@@ -548,7 +548,7 @@ dump_result_to_file(char* reportfname, char** substitute_environment_variables)
 /* Read report and check fiels for changes
  */
 int
-check_for_changes(char* inputfname)
+check_for_changes(char* inputfname, bool print_diff)
 {
   unsigned char ucurrent_hash[mhash_get_block_size(MHASH_MD5)];
   char temp_buffer[PATH_MAX + mhash_get_block_size(MHASH_MD5) +1];
@@ -556,6 +556,7 @@ check_for_changes(char* inputfname)
   char current_hash[mhash_get_block_size(MHASH_MD5)*2 +1];
   char path[PATH_MAX];
   int i = 0;
+  int return_code = REVISOR_TRIGGER_NO_CHANGES_FOUND;
   char *loc_ptr = NULL;
   FILE *fp_ptr = NULL;
   struct stat file_stat;
@@ -592,14 +593,16 @@ check_for_changes(char* inputfname)
     /* Something wrong with input file structure */
     if (loc_ptr == NULL) {
       fprintf(stderr,"Could not find delimiter in the %s line\n",temp_buffer);
-      return REVISOR_TRIGGER_ERROR;
+      return_code = REVISOR_TRIGGER_ERROR;
+      break;
     }
 
     /* Copy hash to separate variable */
     if (!strcpy(input_hash,loc_ptr)) {
 	fprintf(stderr,"Failed to extract hash from %s\n",temp_buffer);
 	fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
-	return REVISOR_TRIGGER_ERROR;
+	return_code = REVISOR_TRIGGER_ERROR;
+	break;
     }
 
     /* Get pointer to path */
@@ -608,12 +611,14 @@ check_for_changes(char* inputfname)
     /* Something wrong with input file structure */
     if (loc_ptr == NULL) {
       fprintf(stderr,"Could not find path in the %s line\n",temp_buffer);
-      return REVISOR_TRIGGER_ERROR;
+      return_code = REVISOR_TRIGGER_ERROR;
+      break;
     }
 
     /* Get real path without env variables in it */
     if (replace_env_variables((char*)&path,loc_ptr) == EXIT_FAILURE) {
-      return REVISOR_TRIGGER_ERROR;
+      return_code = REVISOR_TRIGGER_ERROR;
+      break;
     }
 
     /* Can't find file from the report - consider rebuild */
@@ -621,13 +626,14 @@ check_for_changes(char* inputfname)
       fprintf(stdout, "%s stated in %s was not found. Consider rebuild\n",
 	      path,
 	      inputfname);
-      return REVISOR_TRIGGER_CHANGES_FOUND;
+      return_code = REVISOR_TRIGGER_CHANGES_FOUND;
     }
 
     /* Calculate md5 for the file extracted from the input file */
     if (calculate_md5((unsigned char*)&ucurrent_hash, path) != 0) {
       fprintf(stderr, "Failed to calculate md5 for '%s'\n", path);
-      return REVISOR_TRIGGER_ERROR;
+      return_code = REVISOR_TRIGGER_ERROR;
+      break;
     }
 
     /* We need to transform hash to string to be able to compare it
@@ -639,13 +645,10 @@ check_for_changes(char* inputfname)
     /* Compare hash's */
     if (strcmp(current_hash,input_hash) != 0) {
       /* Changes found. Return success to continue with build */
-      /* Close file failed */
-      if (fclose(fp_ptr) != 0) {
-	fprintf(stderr,"Failed to close %s\n",inputfname);
-	fprintf(stderr,"Error: %s, errno=%d\n",strerror(errno),errno);
-	return REVISOR_TRIGGER_ERROR;
+      return_code = REVISOR_TRIGGER_CHANGES_FOUND;
+      if ( print_diff ) {
+	fprintf(stdout, "Changes found for %s\n", path);
       }
-      return  REVISOR_TRIGGER_CHANGES_FOUND;
     }
   }
 
@@ -656,7 +659,7 @@ check_for_changes(char* inputfname)
     return REVISOR_TRIGGER_ERROR;
   }
 
-  return REVISOR_TRIGGER_NO_CHANGES_FOUND;
+  return return_code;
 }
 
 /* Create the binary tree-structure

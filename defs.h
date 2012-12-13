@@ -513,7 +513,7 @@ extern int load_exclude_rules(char* );
 extern int dump_result_to_file(char*, char**);
 extern int handle_opened_file(char* );
 extern int update_ignore_list(char* );
-extern int check_for_changes(char* );
+extern int check_for_changes(char* , bool);
 extern int is_open_flag(mode_t,int);
 extern void extract_and_save_path(struct tcb *, long, int);
 
