@@ -1,31 +1,39 @@
 #Revisor#
 
 ###Description###
-Revisor is a strace-based audit tool intended to be used for build audit and version control agnostic build avoidance implementation.
+Revisor is a strace-based audit tool intended to be used for build audit
+and version control agnostic build avoidance implementation.
 
-Idea is to trace all files used for a build and then prepare a report that will consist of a list of files and checksums for them. Files generated during the build will be not included because we don't have interest in them.
+Idea is to trace all files used for a build and then prepare a report that
+will consist of a list of files and checksums for them. Files generated
+during the build will be not included because we don't have interest in them.
 
 ###License###
-Revisor is just a fork of [strace](http://sourceforge.net/projects/strace) and use the same license ([New BSD License](http://en.wikipedia.org/wiki/BSD_licenses)) as original project.
+Revisor is just a fork of [strace](http://sourceforge.net/projects/strace) and
+use the same license
+([New BSD License](http://en.wikipedia.org/wiki/BSD_licenses))
+as original project.
 
 ###Features###
 - Absolute paths extracted for all files included into the report
-- Environment variables support. Part of path's could be replaced by environment variables name to remove absolute path's to tracked files
-- Conditional triggering for continuous integration builds, i.e. conditional execution based on provided revisor report.
-  Revisor will parse provided report and execute command only if any file was changed
-- Possibility to ignore patterns to exclude files from /app, /dev and other system directories
+- Environment variables support. Part of path's could be replaced
+  by environment variables name to remove absolute path's to tracked files
+- Conditional triggering for continuous integration builds, i.e.
+  conditional execution based on provided revisor report.
+  Revisor will parse provided report and execute command only if
+  any file was changed
+- Possibility to ignore patterns to exclude files from /app, /dev and other
+  system directories
 
 ###Usage examples###
 - Build (or any other) process tracking
 <pre>
-$ revisor -o revisor.log make
+$ revisor -o revisor.report make
 /bin/mkdir -p ./linux
 cat ./linux/ioctlent.h.in ./linux/x86_64/ioctlent.h.in | \
 ........
 mv -f .deps/ftrace.Tpo .deps/ftrace.Po
-gcc -Wall -Wwrite-strings -g -O2 -lmhash -lglib-2.0  -o revisor strace.o syscall.o count.o util.o desc.o file.o
-ipc.o io.o ioctl.o mem.o net.o process.o bjm.o quota.o resource.o signal.o sock.o system.o term.o time.o scsi.o
-stream.o block.o pathtrace.o mtd.o vsprintf.o loop.o ftrace.o
+gcc -Wall -Wwrite-strings -g -O2 -lmhash -lglib-2.0  -o revisor strace.o ...
 make[2]: Leaving directory '/home/USER/revisor'
 make[1]: Leaving directory '/home/USER/revisor'
 $ less revisor.log
@@ -63,14 +71,12 @@ c905a113f0d1a1067c7fd8ba0d7d2e30        /home/USER/revisor/ipc.c
 $ cat revisorignore
 ^/bin/.*
 ^/etc/.*
-$ revisor -o revisor.log -i revisorignor make
+$ revisor -o revisor.report -i revisorignor make
 /bin/mkdir -p ./linux
 cat ./linux/ioctlent.h.in ./linux/x86_64/ioctlent.h.in | \
 ........
 mv -f .deps/ftrace.Tpo .deps/ftrace.Po
-gcc -Wall -Wwrite-strings -g -O2 -lmhash -lglib-2.0  -o revisor strace.o syscall.o count.o util.o desc.o file.o
-ipc.o io.o ioctl.o mem.o net.o process.o bjm.o quota.o resource.o signal.o sock.o system.o term.o time.o scsi.o
-stream.o block.o pathtrace.o mtd.o vsprintf.o loop.o ftrace.o
+gcc -Wall -Wwrite-strings -g -O2 -lmhash -lglib-2.0  -o revisor strace.o ...
 make[2]: Leaving directory '/home/USER/revisor'
 make[1]: Leaving directory '/home/USER/revisor'
 $ less revisor.log
@@ -95,14 +101,12 @@ $ cat revisorignore
 ^/etc/.*
 $echo $REPOSITORY
 /home/USER/revisor
-$ revisor -o revisor.log -i revisorignor -s REPOSITORY make
+$ revisor -o revisor.report -i revisorignor -s REPOSITORY make
 /bin/mkdir -p ./linux
 cat ./linux/ioctlent.h.in ./linux/x86_64/ioctlent.h.in | \
 ........
 mv -f .deps/ftrace.Tpo .deps/ftrace.Po
-gcc -Wall -Wwrite-strings -g -O2 -lmhash -lglib-2.0  -o revisor strace.o syscall.o count.o util.o desc.o file.o
-ipc.o io.o ioctl.o mem.o net.o process.o bjm.o quota.o resource.o signal.o sock.o system.o term.o time.o scsi.o
-stream.o block.o pathtrace.o mtd.o vsprintf.o loop.o ftrace.o
+gcc -Wall -Wwrite-strings -g -O2 -lmhash -lglib-2.0  -o revisor strace.o ...
 make[2]: Leaving directory '/home/USER/revisor'
 make[1]: Leaving directory '/home/USER/revisor'
 $ less revisor.log
@@ -120,7 +124,8 @@ c905a113f0d1a1067c7fd8ba0d7d2e30        $REPOSITORY/ipc.c
 ........
 </pre>
 
-- Build (or any other) process tracking + ignore rules + environment variables + conditional trigger
+- Build (or any other) process tracking + ignore rules + environment
+variables + conditional trigger
 <pre>
 $ cat revisorignore
 ^/bin/.*
@@ -138,6 +143,15 @@ d66e1f95f36ba29d83101ca8774f432f        $REPOSITORY/io.c
 0fd0c1a9c4932b611f992f413cabbce9        $REPOSITORY/ioctl.c
 c905a113f0d1a1067c7fd8ba0d7d2e30        $REPOSITORY/ipc.c
 ........
-$ revisor -o revisor.log -c revisor.log -i revisorignor make
+$ revisor -o revisor.report -c revisor.report -i revisorignor -s REPOSITORY make
 No changes found. Skip command execution
+</pre>
+
+- Look up for changes using revisor report
+<pre>
+$ revisor -o revisor.report -i revisorignor make
+...
+$ echo "Do modifications for io.c" >> /home/USER/revisor/io.c
+$ revisor -l revisor.report
+Changes found for /home/USER/revisor/io.c
 </pre>
